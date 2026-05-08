@@ -34,7 +34,6 @@ class Adapters {
     this.config = config
     this.wallet = new Wallet(localConfig)
 
-
     this.jobSources = new JobSources({ config })
     this.llm = new LlmAdapter({ config })
     // Get a valid JWT API key and instance bch-js.
@@ -69,7 +68,6 @@ class Adapters {
         // These lines are here to ensure code coverage hits 100%.
         console.log('Not starting IPFS node since this is an e2e test.')
       }
-
 
       await this.jobSources.start()
 

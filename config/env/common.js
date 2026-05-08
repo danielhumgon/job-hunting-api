@@ -160,8 +160,6 @@ export default {
   // Admin password
   adminPassword: process.env.ADMIN_PASSWORD,
 
-
-
   ingestOnBoot: process.env.INGEST_ON_BOOT === 'true',
   ingestIntervalMs: process.env.INGEST_INTERVAL_MS
     ? parseInt(process.env.INGEST_INTERVAL_MS, 10)
