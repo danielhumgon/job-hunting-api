@@ -23,24 +23,36 @@ class TimerControllers {
 
     this.debugLevel = localConfig.debugLevel
 
+    // Encapsulate dependencies
+    this.config = config
+
     // Constants
     this.cleanUsageInterval = 60000 * 60 // 1 hour
     this.backupUsageInterval = 60000 * 10 // 10 minutes
-
-    // Encapsulate dependencies
-    this.config = config
+    this.ingestVacanciesInterval =
+      localConfig.ingestIntervalMs ??
+      this.config.ingestIntervalMs ??
+      1000 * 60 * 60 * 3
 
     // Bind 'this' object to all subfunctions.
     this.cleanUsage = this.cleanUsage.bind(this)
     this.backupUsage = this.backupUsage.bind(this)
+    this.ingestVacancies = this.ingestVacancies.bind(this)
   }
 
   // Start all the time-based controllers.
   startTimers () {
-    // Any new timer control functions can be added here. They will be started
-    // when the server starts.
     this.cleanUsageHandle = setInterval(this.cleanUsage, this.cleanUsageInterval)
     this.backupUsageHandle = setInterval(this.backupUsage, this.backupUsageInterval)
+
+    this.ingestVacanciesHandle = setInterval(
+      this.ingestVacancies,
+      this.ingestVacanciesInterval
+    )
+
+    if (this.config.ingestOnBoot && this.config.env !== 'test') {
+      this.ingestVacancies()
+    }
 
     return true
   }
@@ -48,6 +60,7 @@ class TimerControllers {
   stopTimers () {
     clearInterval(this.cleanUsageHandle)
     clearInterval(this.backupUsageHandle)
+    clearInterval(this.ingestVacanciesHandle)
   }
 
   // Clean the usage state so that stats reflect the last 24 hours.
@@ -95,6 +108,38 @@ class TimerControllers {
       this.backupUsageHandle = setInterval(this.backupUsage, this.backupUsageInterval)
 
       // Note: Do not throw an error. This is a top-level function.
+      return false
+    }
+  }
+
+  /**
+   * Job Hunter ingestion: delegates to use case (fetch → validate → LLM → persist).
+   */
+  async ingestVacancies () {
+    try {
+      clearInterval(this.ingestVacanciesHandle)
+
+      console.log('ingestVacancies() Timer Controller executing at ', new Date().toLocaleString())
+
+      const result = await this.useCases.ingestion.ingestVacancies()
+
+      console.log(
+        'ingestVacancies metrics:',
+        JSON.stringify(result.metrics, null, 2)
+      )
+
+      this.ingestVacanciesHandle = setInterval(
+        this.ingestVacancies,
+        this.ingestVacanciesInterval
+      )
+
+      return result.ok !== false
+    } catch (err) {
+      console.error('ingestVacancies: unexpected: ', err.message)
+      this.ingestVacanciesHandle = setInterval(
+        this.ingestVacancies,
+        this.ingestVacanciesInterval
+      )
       return false
     }
   }

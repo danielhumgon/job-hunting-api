@@ -14,6 +14,7 @@ import LogsRESTController from './logs/index.js'
 import IpfsRESTController from './ipfs/index.js'
 import config from '../../../config/index.js'
 import UsageRESTController from './usage/index.js'
+import VacanciesRouter from './vacancies/index.js'
 
 class RESTControllers {
   constructor (localConfig = {}) {
@@ -52,6 +53,9 @@ class RESTControllers {
       // Attach the REST API Controllers associated with the /user route
       const userRouter = new UserRouter(dependencies)
       userRouter.attach(app)
+
+      const vacanciesRouter = new VacanciesRouter(dependencies)
+      vacanciesRouter.attach(app)
     }
 
     // Attach the REST API Controllers associated with the /contact route

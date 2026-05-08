@@ -57,6 +57,19 @@ class UsageUseCaseMock {
   }
 }
 
+class IngestionUseCaseMock {
+  async ingestVacancies () {
+    return {
+      ok: true,
+      metrics: {
+        phase: 'ingestVacancies',
+        fetched: 0,
+        durationMs: 0
+      }
+    }
+  }
+}
+
 class UseCasesMock {
   constuctor(localConfig = {}) {
     // this.user = new UserUseCaseMock(localConfig)
@@ -64,6 +77,7 @@ class UseCasesMock {
 
   user = new UserUseCaseMock()
   usage = new UsageUseCaseMock()
+  ingestion = new IngestionUseCaseMock()
 }
 
 export default UseCasesMock;

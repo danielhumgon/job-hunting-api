@@ -134,13 +134,19 @@ describe('#IPFS', () => {
       uut.ipfsCoord = {
         adapters: {
           pubsub: {
-            subscribeToPubsubChannel: async () => {
-            }
+            subscribeToPubsubChannel: sandbox.stub().callsFake(async (chan, log) => {
+              if (typeof log === 'function') {
+                log('ping')
+              }
+            })
           }
         }
       }
 
       await uut.subscribeToChat()
+      assert.isTrue(
+        uut.ipfsCoord.adapters.pubsub.subscribeToPubsubChannel.calledOnce
+      )
     })
   })
 })

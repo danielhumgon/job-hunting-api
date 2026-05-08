@@ -22,10 +22,11 @@ const __dirname = url.fileURLToPath(new URL('.', import.meta.url))
 const IPFS_DIR = `${__dirname}../../../.ipfsdata/ipfs`
 
 class IpfsAdapter {
-  constructor (localConfig) {
+  constructor (localConfig = {}) {
     // Encapsulate dependencies
     this.config = config
     this.jsonFiles = new JsonFiles()
+    this.CreateHeliaNode = localConfig.CreateHeliaNode || CreateHeliaNode
 
     // Properties of this class instance.
     this.isReady = false
@@ -40,7 +41,7 @@ class IpfsAdapter {
   async start () {
     try {
       // Create the helia-coord node factory with production configuration.
-      this.heliaNode = new CreateHeliaNode({
+      this.heliaNode = new this.CreateHeliaNode({
         ipfsDir: IPFS_DIR,
         tcpPort: this.config.ipfsTcpPort,
         wsPort: this.config.ipfsWsPort,

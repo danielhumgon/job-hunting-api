@@ -18,6 +18,8 @@ import JSONFiles from './json-files.js'
 import FullStackJWT from './fullstack-jwt.js'
 import config from '../../config/index.js'
 import Wallet from './wallet.adapter.js'
+import JobSources from './job-sources/index.js'
+import LlmAdapter from './llm/index.js'
 
 class Adapters {
   constructor (localConfig = {}) {
@@ -32,6 +34,9 @@ class Adapters {
     this.config = config
     this.wallet = new Wallet(localConfig)
 
+
+    this.jobSources = new JobSources({ config })
+    this.llm = new LlmAdapter({ config })
     // Get a valid JWT API key and instance bch-js.
     this.fullStackJwt = new FullStackJWT(config)
   }
@@ -64,6 +69,9 @@ class Adapters {
         // These lines are here to ensure code coverage hits 100%.
         console.log('Not starting IPFS node since this is an e2e test.')
       }
+
+
+      await this.jobSources.start()
 
       console.log('Async Adapters have been started.')
 

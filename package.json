@@ -8,7 +8,7 @@
     "start": "node index.js",
     "test": "npm run test:unit",
     "test:all": "export SVC_ENV=test && c8 --reporter=text mocha --exit --timeout 15000 --recursive test/unit test/e2e/automated/",
-    "test:unit": "export SVC_ENV=test && c8 --reporter=text mocha --exit --timeout 15000 --recursive test/unit/",
+    "test:unit": "export SVC_ENV=test && c8 --check-coverage --lines 100 --statements 100 --functions 99 --branches 95 --reporter=text mocha --exit --timeout 15000 --recursive test/unit/",
     "test:e2e:auto": "export SVC_ENV=test && mocha --exit --timeout 15000 test/e2e/automated/",
     "start:e2e:server": "export SVC_ENV=test && node index.js",
     "test:temp": "export SVC_ENV=test && mocha --exit --timeout 15000 -g '#rate-limit' test/unit/json-rpc/",
@@ -51,7 +51,8 @@
     "passport-local": "1.0.0",
     "public-ip": "6.0.1",
     "winston": "3.3.3",
-    "winston-daily-rotate-file": "4.5.0"
+    "winston-daily-rotate-file": "4.5.0",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "apidoc": "0.51.1",
