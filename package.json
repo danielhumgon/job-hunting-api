@@ -27,6 +27,7 @@
   "dependencies": {
     "axios": "0.27.2",
     "bcryptjs": "2.4.3",
+    "dotenv": "16.6.1",
     "glob": "7.1.6",
     "helia-coord": "2.0.3",
     "jsonrpc-lite": "2.2.0",
