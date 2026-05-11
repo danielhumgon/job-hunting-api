@@ -13,11 +13,20 @@
 // Hack to get __dirname back.
 // https://blog.logrocket.com/alternatives-dirname-node-js-es-modules/
 import * as url from 'url'
+import path from 'path'
 
 // Get the version from the package.json file.
-import { readFileSync } from 'fs'
+import { readFileSync, existsSync } from 'fs'
+import dotenv from 'dotenv'
+
 const __dirname = url.fileURLToPath(new URL('.', import.meta.url))
-const pkgInfo = JSON.parse(readFileSync(`${__dirname.toString()}/../../package.json`))
+const rootDir = path.join(__dirname, '..', '..')
+const envPath = path.join(rootDir, '.env')
+if (existsSync(envPath)) {
+  dotenv.config({ path: envPath })
+}
+
+const pkgInfo = JSON.parse(readFileSync(path.join(rootDir, 'package.json')))
 
 const version = pkgInfo.version
 
