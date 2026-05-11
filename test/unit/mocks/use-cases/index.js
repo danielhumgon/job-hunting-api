@@ -70,6 +70,30 @@ class IngestionUseCaseMock {
   }
 }
 
+class VacancyUseCaseMock {
+  async listVacancies () {
+    return { data: [], pagination: { page: 1, limit: 10, total: 0, pages: 1 } }
+  }
+
+  async getVacancy () {
+    return { _id: '507f191e810c19729de860ea', title: 't' }
+  }
+
+  async updateVacancy () {
+    return { _id: '507f191e810c19729de860ea', title: 'updated' }
+  }
+
+  async deleteVacancy () {}
+
+  async listAppliedVacancies () {
+    return { data: [] }
+  }
+
+  async markVacancyApplied () {
+    return { _id: '507f191e810c19729de860ea', applied: true, appliedAt: new Date() }
+  }
+}
+
 class UseCasesMock {
   constuctor(localConfig = {}) {
     // this.user = new UserUseCaseMock(localConfig)
@@ -78,6 +102,7 @@ class UseCasesMock {
   user = new UserUseCaseMock()
   usage = new UsageUseCaseMock()
   ingestion = new IngestionUseCaseMock()
+  vacancy = new VacancyUseCaseMock()
 }
 
 export default UseCasesMock;
