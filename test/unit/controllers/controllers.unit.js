@@ -4,6 +4,7 @@
 
 // Public npm libraries
 // const assert = require('chai').assert
+import { assert } from 'chai'
 import sinon from 'sinon'
 
 import Controllers from '../../../src/controllers/index.js'
@@ -36,6 +37,29 @@ describe('#Controllers', () => {
       }
 
       await uut.attachControllers(app)
+    })
+
+    it('should invoke RPC attachments when IPFS is enabled', async () => {
+      sandbox.stub(uut.timerControllers, 'startTimers')
+
+      sandbox.stub(uut.config, 'useIpfs').value(true)
+      sandbox.stub(uut, 'attachRPCControllers')
+
+      await uut.attachControllers({})
+
+      assert.strictEqual(uut.attachRPCControllers.callCount, 1)
+    })
+  })
+  describe('#attachRPCControllers', () => {
+    it('hooks the JSON-RPC router into ipfs-coord', () => {
+      const attachStub = sandbox.stub()
+      uut.adapters.ipfs.ipfsCoordAdapter = {
+        attachRPCRouter: attachStub
+      }
+
+      uut.attachRPCControllers()
+
+      assert.strictEqual(attachStub.callCount, 1)
     })
   })
   describe('#attachRESTControllers', () => {

@@ -13,11 +13,20 @@
 // Hack to get __dirname back.
 // https://blog.logrocket.com/alternatives-dirname-node-js-es-modules/
 import * as url from 'url'
+import path from 'path'
 
 // Get the version from the package.json file.
-import { readFileSync } from 'fs'
+import { readFileSync, existsSync } from 'fs'
+import dotenv from 'dotenv'
+
 const __dirname = url.fileURLToPath(new URL('.', import.meta.url))
-const pkgInfo = JSON.parse(readFileSync(`${__dirname.toString()}/../../package.json`))
+const rootDir = path.join(__dirname, '..', '..')
+const envPath = path.join(rootDir, '.env')
+if (existsSync(envPath)) {
+  dotenv.config({ path: envPath })
+}
+
+const pkgInfo = JSON.parse(readFileSync(path.join(rootDir, 'package.json')))
 
 const version = pkgInfo.version
 
@@ -158,5 +167,26 @@ export default {
   disableNewAccounts: process.env.DISABLE_NEW_ACCOUNTS ? true : false,
 
   // Admin password
-  adminPassword: process.env.ADMIN_PASSWORD
+  adminPassword: process.env.ADMIN_PASSWORD,
+
+  ingestOnBoot: process.env.INGEST_ON_BOOT === 'true',
+  ingestIntervalMs: process.env.INGEST_INTERVAL_MS
+    ? parseInt(process.env.INGEST_INTERVAL_MS, 10)
+    : 1000 * 60 * 60 * 3,
+
+  jobIngestionVersion: process.env.JOB_INGESTION_VERSION || '1',
+
+  /** OpenAI-compatible base URL — include `/v1` (e.g. local Ollama). */
+  llmApiUrl: process.env.LLM_API_URL || 'http://127.0.0.1:11434/v1',
+  llmModel: process.env.LLM_MODEL || 'gemma4',
+  llmApiKey: process.env.OLLAMA_API_KEY || process.env.LLM_API_KEY || '',
+  llmPromptVersion: process.env.LLM_PROMPT_VERSION || '1',
+  minVacancyLlmScore:
+    process.env.MIN_VACANCY_LLM_SCORE !== undefined &&
+    process.env.MIN_VACANCY_LLM_SCORE !== ''
+      ? parseFloat(process.env.MIN_VACANCY_LLM_SCORE)
+      : null,
+  llmMaxRetries: process.env.LLM_MAX_RETRIES
+    ? parseInt(process.env.LLM_MAX_RETRIES, 10)
+    : 5
 }

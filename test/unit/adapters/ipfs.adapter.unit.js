@@ -71,6 +71,35 @@ describe('#IPFS-adapter', () => {
       assert.property(result, 'libp2p')
     })
 
+    it('should run real start pipeline when CreateHeliaNode is injected', async () => {
+      sandbox.stub(console, 'log')
+      sandbox.stub(console, 'error')
+
+      const mockIpfs = {
+        libp2p: {
+          getMultiaddrs: () => [],
+          peerId: 'fake-peer'
+        }
+      }
+
+      function FakeHelia (opts) {
+        this.opts = opts
+        this.id = 'fake-id'
+        this.multiaddrs = ['/ip4/fake-multiaddr']
+      }
+      FakeHelia.prototype.start = async function () {
+        return mockIpfs
+      }
+
+      const fresh = new IPFSLib({ CreateHeliaNode: FakeHelia })
+      const result = await fresh.start()
+
+      assert.strictEqual(result, mockIpfs)
+      assert.strictEqual(fresh.isReady, true)
+      assert.strictEqual(fresh.id, 'fake-id')
+      assert.deepEqual(fresh.multiaddrs, ['/ip4/fake-multiaddr'])
+    })
+
     it('should catch and throw an error', async () => {
       try {
         // Force an error by making getSeed throw, which will cause
@@ -83,6 +112,25 @@ describe('#IPFS-adapter', () => {
         // console.log(err)
         assert.include(err.message, 'test error')
       }
+    })
+
+    it('should surface errors from injected helia factory', async () => {
+      sandbox.stub(console, 'error')
+
+      function BadHelia () {}
+      BadHelia.prototype.start = async function () {
+        throw new Error('helia-init-failed')
+      }
+
+      const fresh = new IPFSLib({ CreateHeliaNode: BadHelia })
+
+      try {
+        await fresh.start()
+        assert.fail('expected throw')
+      } catch (err) {
+        assert.include(err.message, 'helia-init-failed')
+      }
+      sinon.assert.calledWith(console.error, 'Error in ipfs.js/start()')
     })
   })
 
