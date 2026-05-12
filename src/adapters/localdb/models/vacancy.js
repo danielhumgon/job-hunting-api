@@ -34,7 +34,9 @@ const VacancySchema = new mongoose.Schema(
     llmClassifiedAt: { type: Date },
     llmRawOutput: { type: mongoose.Schema.Types.Mixed },
 
-    belowMinScore: { type: Boolean, default: false }
+    belowMinScore: { type: Boolean, default: false },
+    applied: { type: Boolean, default: false },
+    appliedAt: { type: Date }
   },
   {
     timestamps: true
@@ -46,6 +48,7 @@ VacancySchema.index({ category: 1, datePosted: -1 })
 VacancySchema.index({ locationType: 1, datePosted: -1 })
 VacancySchema.index({ llmScore: -1, datePosted: -1 })
 VacancySchema.index({ llmStatus: 1 })
+VacancySchema.index({ applied: 1, appliedAt: -1 })
 VacancySchema.index(
   { title: 'text', summary: 'text', keywords: 'text' },
   { weights: { title: 5, summary: 2, keywords: 1 } }

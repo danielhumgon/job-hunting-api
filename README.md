@@ -34,7 +34,7 @@ New features (additional sources, API changes, scoring behavior) should be **doc
 |------------|-------------|
 | **Ingestion** | Timer-driven pipeline: fetch → validate → LLM score → upsert into MongoDB. |
 | **LLM scoring** | OpenAI-compatible chat API; prompt in `src/adapters/llm/vacancy-scoring-prompt.md`; retries and validation via `zod`. |
-| **REST** | `GET /api/v1/vacancies` (filters, pagination, full-text `q`) and `GET /api/v1/vacancies/:id` when Mongo is enabled. |
+| **REST** | `GET /vacancies/:page` (paginated list) and `GET /vacancies/:id` when Mongo is enabled. |
 | **Boilerplate** | Users, JWT auth, usage stats, IPFS/Helia integration, JSON-RPC, and existing `/api/v1/*` routes from upstream (see upstream README patterns). |
 
 ---
@@ -109,13 +109,13 @@ Base URL assumes `http://localhost:5020`.
 
 ```bash
 # Paginated list, sorted by relevance (llmScore) and recency by default
-curl 'http://localhost:5020/api/v1/vacancies?page=1&limit=20'
+curl 'http://localhost:5020/vacancies/1'
 
-# Full-text search + filters (see specs for full list)
-curl 'http://localhost:5020/api/v1/vacancies?q=nodejs&locationType=remoto&minScore=0.5'
+# Second page (10 items per page)
+curl 'http://localhost:5020/vacancies/2'
 
 # Single document by Mongo _id
-curl 'http://localhost:5020/api/v1/vacancies/<id>'
+curl 'http://localhost:5020/vacancies/<id>'
 ```
 
 Public vacancy routes do not require authentication in v1; other boilerplate routes may still enforce JWT—see **[dev-docs/vacantesdigitales/specs.md](./dev-docs/vacantesdigitales/specs.md)**.

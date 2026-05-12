@@ -1,12 +1,10 @@
 /*
-  REST API router for /api/v1/vacancies
+  REST API router for /vacancies
 */
 
 import Router from 'koa-router'
 
 import VacanciesRESTControllerLib from './controller.js'
-
-let _this
 
 class VacanciesRouter {
   constructor (localConfig = {}) {
@@ -16,15 +14,22 @@ class VacanciesRouter {
         'Instance of Adapters library required when instantiating Vacancies REST router.'
       )
     }
+    this.useCases = localConfig.useCases
+    if (!this.useCases) {
+      throw new Error(
+        'Instance of Use Cases library required when instantiating Vacancies REST router.'
+      )
+    }
 
     const dependencies = {
-      adapters: this.adapters
+      adapters: this.adapters,
+      useCases: this.useCases
     }
 
     this.vacanciesController = new VacanciesRESTControllerLib(dependencies)
-    const baseUrl = '/api/v1/vacancies'
+    const baseUrl = '/vacancies'
     this.router = new Router({ prefix: baseUrl })
-    _this = this
+    this.attach = this.attach.bind(this)
   }
 
   attach (app) {
@@ -34,8 +39,21 @@ class VacanciesRouter {
       )
     }
 
-    this.router.get('/', async (ctx, next) => _this.vacanciesController.listVacancies(ctx, next))
-    this.router.get('/:id', async (ctx, next) => _this.vacanciesController.getVacancy(ctx, next))
+    this.router.get(
+      '/apply',
+      async (ctx, next) => this.vacanciesController.listAppliedVacancies(ctx, next)
+    )
+    this.router.post(
+      '/apply',
+      async (ctx, next) => this.vacanciesController.postApplyVacancy(ctx, next)
+    )
+    this.router.get(
+      '/:page(\\d+)',
+      async (ctx, next) => this.vacanciesController.listVacancies(ctx, next)
+    )
+    this.router.get('/:id', async (ctx, next) => this.vacanciesController.getVacancy(ctx, next))
+    this.router.put('/:id', async (ctx, next) => this.vacanciesController.updateVacancy(ctx, next))
+    this.router.delete('/:id', async (ctx, next) => this.vacanciesController.deleteVacancy(ctx, next))
 
     app.use(this.router.routes())
     app.use(this.router.allowedMethods())

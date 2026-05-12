@@ -8,6 +8,7 @@
 import UserUseCases from './user.js'
 import { UsageUseCases } from './usage-use-cases.js'
 import IngestionUseCases from './ingestion.js'
+import VacancyLib from './vacancy.js'
 
 class UseCases {
   constructor (localConfig = {}) {
@@ -22,6 +23,7 @@ class UseCases {
     this.user = new UserUseCases(localConfig)
     this.usage = new UsageUseCases(localConfig)
     this.ingestion = new IngestionUseCases(localConfig)
+    this.vacancy = new VacancyLib(localConfig)
   }
 
   // Run any startup Use Cases at the start of the app.

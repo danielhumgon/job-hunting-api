@@ -142,14 +142,6 @@ const localdb = {
         lean: async () => null
       }
     }
-  },
-
-  async listVacancies () {
-    return { data: [], pagination: { page: 1, limit: 20, total: 0, pages: 1 } }
-  },
-
-  async getVacancyById () {
-    return null
   }
 }
 

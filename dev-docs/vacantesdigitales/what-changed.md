@@ -19,7 +19,7 @@ Compared to `master`, `trout-custom` adds or modifies roughly these areas:
 | **Adapters**       | `JobSources` registry + `VacantesDigitales` HTTP client; `LlmAdapter` + `fetch-with-retry.js` + `vacancy-scoring-prompt.md`; `Vacancy` Mongoose model and `LocalDB` query helpers; `Adapters.start()` warms job sources. Minor `IpfsAdapter` constructor injects `CreateHeliaNode` for tests. |
 | **Use cases**      | `IngestionUseCases.ingestVacancies()` — orchestrates fetch → validate → score → upsert.                                                                                                                                                                                                   |
 | **Domain**         | `entities/vacancy.js` — minimal validation before persistence.                                                                                                                                                                                                                               |
-| **HTTP**           | `GET /api/v1/vacancies` and `GET /api/v1/vacancies/:id` (attached when Mongo is enabled).                                                                                                                                                                                                     |
+| **HTTP**           | `GET /vacancies/:page`, `GET/PUT/DELETE /vacancies/:id` (attached when Mongo is enabled).                                                                                                                                                                                                     |
 | **Timers**         | `TimerControllers` runs scheduled vacancy ingestion in addition to existing usage cleanup/backup timers.                                                                                                                                                                                      |
 | **Tests**          | Unit coverage for job sources, LLM adapter, retry helper, localdb vacancy listing, ingestion use case, vacancies REST layer, timer ingestion path, config, and updated mocks.                                                                                                                 |
 | **Docs / misc**    | Root`README.md` no longer links to `dev-docs` (content-only tweak).                                                                                                                                                                                                                           |
@@ -76,8 +76,8 @@ New sources can be added by implementing the same contract and registering the c
 ### 3.4 Persistence and read API
 
 - **Model** — `src/adapters/localdb/models/vacancy.js` defines indexes: unique `(source, externalId)`, filters on category/location/`llmScore`, text index on title/summary/keywords.
-- **Queries** — `LocalDB.listVacancies(query)` supports pagination, text search (`q`), filters (`category`, `locationType`, `experience`, `source`, `since`, `minScore`), default sort `llmScore` desc then `datePosted` desc. `getVacancyById` returns a single lean document or null.
-- **REST** — Under `/api/v1/vacancies`, list and get-by-id handlers delegate to `LocalDB` (same pattern as other Koa routers in the project).
+- **Queries** — Vacancy list/read/update/delete are implemented in `VacancyLib` (`src/use-cases/vacancy.js`): paginated list via `GET /vacancies/:page` (fixed page size), single document by id, update, and delete.
+- **REST** — Routes are mounted under `/vacancies` (same Koa router pattern as other REST modules in the project).
 
 ### 3.5 Timers
 

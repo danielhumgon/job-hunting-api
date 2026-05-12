@@ -43,13 +43,16 @@ for background jobs.
 
 | Method | Route                   | Description                          |
 |--------|-------------------------|--------------------------------------|
-| GET    | `/api/v1/vacancies`     | Paginated vacancy list with filters  |
-| GET    | `/api/v1/vacancies/:id` | Single vacancy detail by internal ID |
+| GET    | `/vacancies/:page`      | Paginated vacancy list (page is a positive integer; 10 per page) |
+| GET    | `/vacancies/:id`        | Single vacancy detail by internal Mongo ID                      |
+| PUT    | `/vacancies/:id`        | Update a vacancy                                                |
+| DELETE | `/vacancies/:id`        | Delete a vacancy                                                |
 
-### Available filters for `GET /api/v1/vacancies`
+List responses are sorted by `llmScore` desc, then `datePosted` desc. Query strings on the list route are ignored.
 
-`page`, `limit`, `q` (full-text), `category`, `locationType`, `experience`,
-`source`, `since`, `minScore`
+### Historical note
+
+Earlier drafts described filters (`q`, `category`, etc.) on the list endpoint; the current implementation exposes **path-based pagination only** on `GET /vacancies/:page`.
 
 > The `/api/v1/health` and `/api/v1/users` endpoints already exist in the
 > boilerplate and are not modified.
