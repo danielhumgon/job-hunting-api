@@ -13,6 +13,7 @@ function makeUut (sandbox, overrides = {}) {
       listVacancies: sandbox.stub().resolves({ data: [], pagination: {} }),
       listAppliedVacancies: sandbox.stub().resolves({ data: [] }),
       markVacancyApplied: sandbox.stub().resolves({ applied: true }),
+      filterVacancies: sandbox.stub().resolves({ data: [], pagination: {} }),
       getVacancy: sandbox.stub().resolves(null),
       updateVacancy: sandbox.stub().resolves({}),
       deleteVacancy: sandbox.stub().resolves(),
@@ -163,6 +164,49 @@ describe('#Vacancies-REST-controller', () => {
       const ctx = { request: { body: { id: '507f191e810c19729de860ea' } } }
       await uut.postApplyVacancy(ctx)
       assert.strictEqual(ctx.status, 404)
+    })
+  })
+
+  describe('filterVacancies()', () => {
+    it('should set ctx.body from use case with ctx.query', async () => {
+      const payload = { data: [{ _id: '1' }], pagination: { page: 1, limit: 5 } }
+      const filterVacancies = sandbox.stub().resolves(payload)
+      const { uut } = makeUut(sandbox, {
+        vacancy: { filterVacancies }
+      })
+      const query = {
+        minScore: '3',
+        sinceDate: '2026-01-01',
+        source: 's',
+        category: 'c',
+        locationType: 'remote',
+        experience: 'senior',
+        perPage: '5',
+        page: '2'
+      }
+      const ctx = { query }
+      await uut.filterVacancies(ctx)
+      assert.deepStrictEqual(ctx.body, payload)
+      assert.isTrue(filterVacancies.calledOnceWith(query))
+    })
+
+    it('should map errors through handleError', async () => {
+      const err = new Error('bad filter')
+      err.status = 400
+      const { uut } = makeUut(sandbox, {
+        vacancy: { filterVacancies: sandbox.stub().rejects(err) }
+      })
+      const ctx = { query: { minScore: 'x' } }
+      await uut.filterVacancies(ctx)
+      assert.strictEqual(ctx.status, 400)
+    })
+
+    it('should pass {} when ctx.query is missing', async () => {
+      const filterVacancies = sandbox.stub().resolves({ data: [], pagination: {} })
+      const { uut } = makeUut(sandbox, { vacancy: { filterVacancies } })
+      const ctx = {}
+      await uut.filterVacancies(ctx)
+      assert.isTrue(filterVacancies.calledOnceWith({}))
     })
   })
 

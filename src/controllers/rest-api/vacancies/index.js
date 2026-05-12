@@ -47,6 +47,10 @@ class VacanciesRouter {
       '/apply',
       async (ctx, next) => this.vacanciesController.postApplyVacancy(ctx, next)
     )
+    this.router.post(
+      '/filter',
+      async (ctx, next) => this.vacanciesController.filterVacancies(ctx, next)
+    )
     this.router.get(
       '/:page(\\d+)',
       async (ctx, next) => this.vacanciesController.listVacancies(ctx, next)

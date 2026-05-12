@@ -25,6 +25,7 @@ class VacanciesRESTControllerLib {
     this.getVacancy = this.getVacancy.bind(this)
     this.updateVacancy = this.updateVacancy.bind(this)
     this.deleteVacancy = this.deleteVacancy.bind(this)
+    this.filterVacancies = this.filterVacancies.bind(this)
     this.handleError = this.handleError.bind(this)
   }
 
@@ -162,6 +163,40 @@ class VacanciesRESTControllerLib {
   async listVacancies (ctx) {
     try {
       const result = await this.useCases.vacancy.listVacancies(ctx.params.page)
+      ctx.body = result
+    } catch (err) {
+      this.handleError(ctx, err)
+    }
+  }
+
+  /**
+   * @api {post} /vacancies/filter Filter vacancies (query string)
+   * @apiName FilterVacancies
+   * @apiGroup REST Vacancies
+   *
+   * All filter and pagination parameters are read from the URL query string.
+   *
+   * @apiParam {Number} [minScore] Minimum `llmScore` (inclusive)
+   * @apiParam {String} [since] ISO date; vacancies with `datePosted >= since`
+   * @apiParam {String} [sinceDate] Alias of `since`
+   * @apiParam {String} [source]
+   * @apiParam {String} [category]
+   * @apiParam {String} [locationType]
+   * @apiParam {String} [LocationType] Alias of `locationType`
+   * @apiParam {String} [experience] Maps to `experienceLevel`
+   * @apiParam {String} [experienceLevel] Alias of `experience`
+   * @apiParam {Number} [page] Page number (default 1)
+   * @apiParam {Number} [perPage] Page size (default 10, max 100)
+   *
+   * @apiExample Example usage:
+   * curl -X POST 'http://localhost:5020/vacancies/filter?minScore=5&since=2026-01-01&source=vacantesdigitales&perPage=20&page=1'
+   *
+   * @apiSuccess {Object[]} data Matching vacancies
+   * @apiSuccess {Object} pagination Pagination metadata
+   */
+  async filterVacancies (ctx) {
+    try {
+      const result = await this.useCases.vacancy.filterVacancies(ctx.query || {})
       ctx.body = result
     } catch (err) {
       this.handleError(ctx, err)

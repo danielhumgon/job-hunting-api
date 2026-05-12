@@ -12,6 +12,9 @@ import wlogger from '../adapters/wlogger.js'
 /** Fixed page size for REST listing; not overridable via query. */
 export const VACANCIES_LIST_PAGE_SIZE = 10
 
+/** Max items per page for filtered listing (query `perPage`). */
+export const VACANCIES_FILTER_MAX_PER_PAGE = 100
+
 const RESERVED_KEYS = new Set(['_id', '__v', 'createdAt', 'updatedAt'])
 
 function sanitizePayload (body = {}) {
@@ -20,6 +23,79 @@ function sanitizePayload (body = {}) {
     delete out[k]
   }
   return out
+}
+
+function trimString (v) {
+  if (v === undefined || v === null) return ''
+  return String(v).trim()
+}
+
+/**
+ * Build Mongo filter + pagination from query-style options (POST /vacancies/filter).
+ *
+ * @param {object} raw
+ * @param {string|number} [raw.minScore] — `llmScore >= minScore`
+ * @param {string|Date} [raw.since] — `datePosted >= since` (ISO date string)
+ * @param {string} [raw.source]
+ * @param {string} [raw.category]
+ * @param {string} [raw.locationType]
+ * @param {string} [raw.experience] — maps to `experienceLevel`
+ * @param {string|number} [raw.page] — 1-based page (default 1)
+ * @param {string|number} [raw.perPage] — page size (default `VACANCIES_LIST_PAGE_SIZE`, max `VACANCIES_FILTER_MAX_PER_PAGE`)
+ */
+export function parseVacancyFilterOptions (raw = {}) {
+  const filter = {}
+
+  const minScoreRaw = raw.minScore
+  if (
+    minScoreRaw !== undefined &&
+    minScoreRaw !== null &&
+    String(minScoreRaw).trim() !== ''
+  ) {
+    const n = Number(minScoreRaw)
+    if (!Number.isFinite(n)) {
+      const err = new Error('minScore must be a finite number')
+      err.status = 400
+      throw err
+    }
+    filter.llmScore = { $gte: n }
+  }
+
+  const sinceRaw = raw.since ?? raw.sinceDate
+  if (
+    sinceRaw !== undefined &&
+    sinceRaw !== null &&
+    String(sinceRaw).trim() !== ''
+  ) {
+    const d = sinceRaw instanceof Date ? sinceRaw : new Date(sinceRaw)
+    if (Number.isNaN(d.getTime())) {
+      const err = new Error('since must be a valid date')
+      err.status = 400
+      throw err
+    }
+    filter.datePosted = { $gte: d }
+  }
+
+  const source = trimString(raw.source)
+  if (source) filter.source = source
+
+  const category = trimString(raw.category)
+  if (category) filter.category = category
+
+  const locationType = trimString(raw.locationType ?? raw.LocationType)
+  if (locationType) filter.locationType = locationType
+
+  const experience = trimString(raw.experience ?? raw.experienceLevel)
+  if (experience) filter.experienceLevel = experience
+
+  const page = Math.max(1, parseInt(raw.page, 10) || 1)
+  let perPage = parseInt(raw.perPage, 10)
+  if (!Number.isFinite(perPage) || perPage < 1) {
+    perPage = VACANCIES_LIST_PAGE_SIZE
+  }
+  perPage = Math.min(perPage, VACANCIES_FILTER_MAX_PER_PAGE)
+
+  return { filter, page, perPage }
 }
 
 class VacancyLib {
@@ -65,6 +141,41 @@ class VacancyLib {
       }
     } catch (err) {
       wlogger.error('Error in vacancy.js/listVacancies()')
+      throw err
+    }
+  }
+
+  /**
+   * Filtered, paginated vacancy list. Sort matches unfiltered list (`llmScore`, `datePosted`).
+   *
+   * @param {object} raw — typically query params: minScore, since, source, category, locationType, experience, page, perPage
+   */
+  async filterVacancies (raw = {}) {
+    try {
+      const { filter, page, perPage } = parseVacancyFilterOptions(raw)
+
+      const [data, total] = await Promise.all([
+        this.VacancyModel.find(filter)
+          .sort({ llmScore: -1, datePosted: -1 })
+          .skip((page - 1) * perPage)
+          .limit(perPage)
+          .lean(),
+        this.VacancyModel.countDocuments(filter)
+      ])
+
+      return {
+        data,
+        pagination: {
+          page,
+          limit: perPage,
+          total,
+          pages: Math.ceil(total / perPage) || 1
+        }
+      }
+    } catch (err) {
+      if (err.status === 400) throw err
+
+      wlogger.error('Error in vacancy.js/filterVacancies()')
       throw err
     }
   }

@@ -5,7 +5,6 @@ const VacancySchema = new mongoose.Schema(
   {
     externalId: { type: mongoose.Schema.Types.Mixed, required: true },
     source: { type: String, required: true },
-
     title: { type: String, required: true },
     slug: { type: String },
     company: { type: mongoose.Schema.Types.Mixed },

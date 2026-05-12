@@ -22,9 +22,11 @@ import dotenv from 'dotenv'
 const __dirname = url.fileURLToPath(new URL('.', import.meta.url))
 const rootDir = path.join(__dirname, '..', '..')
 const envPath = path.join(rootDir, '.env')
+/* c8 ignore start */
 if (existsSync(envPath)) {
   dotenv.config({ path: envPath })
 }
+/* c8 ignore stop */
 
 const pkgInfo = JSON.parse(readFileSync(path.join(rootDir, 'package.json')))
 
