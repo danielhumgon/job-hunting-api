@@ -11,6 +11,42 @@ const BASE_URL = 'https://vacantesdigitales.com/api'
 /** Page size for GET /api/list (API default). */
 const LIST_PAGE_SIZE = 10
 
+/**
+ * One full-text query per core area in `vacancy-scoring-prompt.md` (Profile Context).
+ * Each `GET /api/search?q=` returns up to 10 rows ([API docs](https://vacantesdigitales.com/api#endpoints)).
+ */
+export const PROFILE_STACK_SEARCH_QUERIES = [
+  'Node.js Express Koa MongoDB',
+  'React Next.js Vite Tailwind CSS',
+  'web3 dApp IPFS P2P AI agents',
+  'unit integration testing'
+]
+
+/**
+ * Ingest drops vacancies whose title, body, keywords, or skills match these stacks (case-insensitive).
+ * JavaScript / Node jobs are kept (`java` uses a boundary so it does not match `javascript`).
+ */
+export const IGNORE_STACK_FOR_INGEST = [
+  'Python',
+  'Java',
+  'PHP',
+  '.NET',
+  'Ruby',
+  'C++'
+]
+
+/** Precompiled matchers for {@link IGNORE_STACK_FOR_INGEST}. */
+const IGNORE_STACK_REGEXES = [
+  /\bpython(?:\d+(\.\d+)?)?\b/i,
+  /\bphp\b/i,
+  /\bruby\b/i,
+  /\bjava\b(?!script\b|[a-z])/i,
+  /\bdotnet\b/i,
+  /\basp\.net\b/i,
+  /(?:^|[^\w.])(?:\.net)(?:\s+core|\s+\d|$|\s|[),.;:!?/\-–—])/i,
+  /\bc\+\+|\bcpp\b/i
+]
+
 export default class VacantesDigitales {
   /**
    * Sets base URLs, ingestion filters, and binds `normalize` for use as a callback (e.g. `rows.map(this.normalize)`).
@@ -46,6 +82,7 @@ export default class VacantesDigitales {
     }
     try {
       const { data } = await axios.get(url, { params })
+
       return data
     } catch (err) {
       console.log('err', err)
@@ -84,6 +121,8 @@ export default class VacantesDigitales {
       }
     }
 
+    console.log('fetching vacancies', data.length)
+
     const trimmed = data.slice(0, targetCount)
     const refPagination = payloads[0]?.pagination
 
@@ -105,31 +144,62 @@ export default class VacantesDigitales {
   }
 
   /**
-   * Ingestion pipeline: pages **`GET /api/vacancies`** with fixed filters (`category=desarrollo`, `location_type=remoto`, `limit=100`) until all pages are consumed (see specs.md §6).
-   * Each row is passed through {@link VacantesDigitales#normalize}.
+   * Ingestion pipeline: runs **`GET /api/search`** once per {@link PROFILE_STACK_SEARCH_QUERIES}
+   * (aligned with `vacancy-scoring-prompt.md` stack areas), merges rows, dedupes by `id`, then {@link VacantesDigitales#normalize}s each.
    *
    * @returns {Promise<object[]>} Array of normalized vacancy documents ready for LLM scoring / persistence.
    */
   async fetchVacancies () {
-    const out = []
-    let page = 1
-    let totalPages = 1
-
-    while (page <= totalPages) {
-      const payload = await this._getJson('vacancies', {
-        category: this.category,
-        location_type: this.locationTypeFilter,
-        limit: this.pageLimit,
-        page
-      })
+    const payloads = await Promise.all(
+      PROFILE_STACK_SEARCH_QUERIES.map((q) => this._getJson('search', { q }))
+    )
+    const byId = new Map()
+    let rawRowCount = 0
+    for (const payload of payloads) {
       const rows = Array.isArray(payload.data) ? payload.data : []
-      out.push(...rows.map(this.normalize))
-      const pag = payload.pagination || {}
-      totalPages = typeof pag.pages === 'number' ? pag.pages : 1
-      page += 1
+      rawRowCount += rows.length
+      for (const raw of rows) {
+        if (raw && raw.id != null && !byId.has(raw.id)) {
+          byId.set(raw.id, raw)
+        }
+      }
     }
+    const deduped = [...byId.values()]
+    const kept = deduped.filter((raw) => !this._matchesIgnoreStack(raw))
+    const ignoredStackCount = deduped.length - kept.length
+    const normalized = kept.map(this.normalize)
+    let logMsg =
+      `VacantesDigitales.fetchVacancies: ${normalized.length} unique vacancies` +
+      (rawRowCount !== deduped.length
+        ? ` (${rawRowCount} rows from /api/search before dedupe)`
+        : '')
+    if (ignoredStackCount > 0) {
+      logMsg += `; skipped ${ignoredStackCount} ignored-stack match(es)`
+    }
+    console.log(logMsg)
+    return normalized
+  }
 
-    return out
+  /**
+   * True if this raw row should not be ingested because it matches {@link IGNORE_STACK_FOR_INGEST}.
+   *
+   * @param {object} raw — API row (search/list/vacancies shape).
+   * @returns {boolean}
+   */
+  _matchesIgnoreStack (raw) {
+    if (!raw || typeof raw !== 'object') return false
+    const parts = [
+      raw.title,
+      this._primaryBodyText(raw),
+      ...(Array.isArray(raw.keywords) ? raw.keywords : []),
+      ...(Array.isArray(raw.skills) ? raw.skills : [])
+    ]
+    const haystack = parts
+      .filter((p) => p != null && String(p).length)
+      .map((p) => String(p))
+      .join('\n')
+    if (!haystack.length) return false
+    return IGNORE_STACK_REGEXES.some((re) => re.test(haystack))
   }
 
   /**
@@ -142,12 +212,12 @@ export default class VacantesDigitales {
   normalize (raw) {
     const fetchedAt = new Date()
     const ingestionVersion = this.config.jobIngestionVersion || '1'
-    const category = raw.job_category || this.category
+    const category = raw.job_category || raw.category || this.category
     const slug = raw.slug || ''
 
-    const summarySource = typeof raw.copy_seo_raw === 'string' ? raw.copy_seo_raw : ''
+    const bodyText = this._primaryBodyText(raw)
     const summary =
-      summarySource.length > 480 ? `${summarySource.slice(0, 477)}…` : summarySource
+      bodyText.length > 480 ? `${bodyText.slice(0, 477)}…` : bodyText
 
     return {
       source: this.sourceSlug,
@@ -156,18 +226,25 @@ export default class VacantesDigitales {
       slug,
       company: raw.company || null,
       category,
-      locationType: this._mapJobLocationType(raw.job_location_type),
+      locationType: this._mapJobLocationType(
+        raw.job_location_type ?? raw.location_type
+      ),
       addressLocality: raw.address_locality || null,
       addressCountry: raw.address_country || null,
-      experienceLevel: raw.experience || null,
-      datePosted: this._normalizeDate(raw.date_posted_iso || raw.post_date),
+      experienceLevel: raw.experience ?? raw.experience_level ?? null,
+      datePosted: this._normalizeDate(
+        raw.date_posted_iso || raw.post_date || raw.date_posted
+      ),
       validThrough: this._normalizeDate(raw.valid_through),
       keywords: Array.isArray(raw.keywords) ? raw.keywords : [],
       skills: Array.isArray(raw.skills) ? raw.skills : [],
       summary,
-      content: typeof raw.copy_seo_raw === 'string' ? raw.copy_seo_raw : '',
-      applyUrl: raw.post_url || null,
-      sourceUrl: `https://vacantesdigitales.com/empleo-digital/${category}/${slug}`,
+      content: bodyText,
+      applyUrl: raw.post_url ?? raw.apply_url ?? null,
+      sourceUrl:
+        typeof raw.url === 'string' && raw.url
+          ? raw.url
+          : `https://vacantesdigitales.com/empleo-digital/${category}/${slug}`,
       fetchedAt,
       ingestionVersion,
 
@@ -181,6 +258,25 @@ export default class VacantesDigitales {
       llmRawOutput: null,
       belowMinScore: false
     }
+  }
+
+  /**
+   * Prefer SEO/copy field from **`/api/vacancies`**, else markdown body from **`/api/list`** / **`/api/search`**.
+   *
+   * @param {object} raw
+   * @returns {string}
+   */
+  _primaryBodyText (raw) {
+    if (typeof raw.copy_seo_raw === 'string' && raw.copy_seo_raw.length) {
+      return raw.copy_seo_raw
+    }
+    if (typeof raw.content === 'string' && raw.content.length) {
+      return raw.content
+    }
+    if (typeof raw.summary === 'string') {
+      return raw.summary
+    }
+    return ''
   }
 
   /**
@@ -202,10 +298,31 @@ export default class VacantesDigitales {
    * @returns {string|null} Lowercase modality or **`null`** if unknown.
    */
   _mapJobLocationType (jobLocationType) {
-    const t = String(jobLocationType || '').toUpperCase()
+    if (jobLocationType == null || jobLocationType === '') return null
+    const s = String(jobLocationType).trim()
+    const lower = s.toLowerCase()
+    if (
+      lower === 'remoto' ||
+      lower === 'remote' ||
+      lower === 'telecommute'
+    ) {
+      return 'remoto'
+    }
+    if (lower === 'hibrido' || lower === 'hybrid' || lower === 'híbrido') {
+      return 'hibrido'
+    }
+    if (
+      lower === 'presencial' ||
+      lower === 'onsite' ||
+      lower === 'in_store' ||
+      lower === 'in-store'
+    ) {
+      return 'presencial'
+    }
+    const t = s.toUpperCase()
     if (t === 'TELECOMMUTE') return 'remoto'
     if (t === 'HYBRID') return 'hibrido'
     if (t === 'ONSITE' || t === 'IN_STORE') return 'presencial'
-    return jobLocationType ? String(jobLocationType).toLowerCase() : null
+    return lower || null
   }
 }

@@ -12,7 +12,11 @@ The design goal is **many job boards and APIs, one pipeline**:
 2. **Registry** (`src/adapters/job-sources/index.js`) lists every active source. On each ingestion tick, the registry merges batches from all sources; failures in one source do not stop the others.
 3. **Identity** is always `source` + `externalId`, so the same logical job updates in place when re-ingested, regardless of which batch it arrived in.
 
-**Vacantes Digitales** (`vacantesdigitales`) is the **first** implemented source—it is not the architecture. New sources are added by implementing the same contract and registering the class in the `JobSources` registry. Field-level rules for the first source and the HTTP surface are documented in [dev-docs/vacantesdigitales/specs.md](./dev-docs/vacantesdigitales/specs.md).
+**Vacantes Digitales** (`vacantesdigitales`) is the **first** implemented source—it is not the architecture. Ingestion calls **[Vacantes Digitales `GET /api/search`](https://vacantesdigitales.com/api#endpoints)** several times with full-text queries defined in [`src/adapters/job-sources/vacantesdigitales.js`](./src/adapters/job-sources/vacantesdigitales.js) as `PROFILE_STACK_SEARCH_QUERIES` (aligned with the target stack in [`src/adapters/llm/vacancy-scoring-prompt.md`](./src/adapters/llm/vacancy-scoring-prompt.md)). Results are merged and **deduped by vacancy `id`**, then normalized to the canonical shape (the normalizer accepts both this JSON shape and the older `/api/vacancies`-style fields).
+
+Each successful fetch logs how many **unique** vacancies were returned and, when duplicates appeared across queries, how many **raw** rows were returned before dedupe (`VacantesDigitales.fetchVacancies: …`).
+
+New sources are added by implementing the same contract and registering the class in the `JobSources` registry. Field-level rules for the first source and the HTTP surface are documented in [dev-docs/vacantesdigitales/specs.md](./dev-docs/vacantesdigitales/specs.md) (note: the adapter’s live HTTP usage may be newer than portions of that doc—**`vacantesdigitales.js`** is the source of truth for which endpoints are called).
 
 ---
 
@@ -101,7 +105,8 @@ See **[production/docker/README.md](./production/docker/README.md)** for the thr
 
 - A **timer** runs vacancy ingestion on `INGEST_INTERVAL_MS` (default: three hours).  
 - If **`INGEST_ON_BOOT=true`** and the environment is not `test`, one run happens shortly after timers start.  
-- Logs include **metrics** for each tick (counts per source, LLM failures, persistence stats).
+- Logs include **metrics** for each tick (counts per source, LLM failures, persistence stats).  
+- **Vacantes Digitales** also prints a line such as `VacantesDigitales.fetchVacancies: N unique vacancies` when that source finishes its `/api/search` batch (see multi-source section above).
 
 ### Vacancies API (examples)
 

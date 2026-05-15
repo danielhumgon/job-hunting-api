@@ -6,7 +6,10 @@ import axios from 'axios'
 import { assert } from 'chai'
 import sinon from 'sinon'
 
-import VacantesDigitales from '../../../../src/adapters/job-sources/vacantesdigitales.js'
+import VacantesDigitales, {
+  IGNORE_STACK_FOR_INGEST,
+  PROFILE_STACK_SEARCH_QUERIES
+} from '../../../../src/adapters/job-sources/vacantesdigitales.js'
 
 describe('#VacantesDigitales', () => {
   let sandbox
@@ -92,23 +95,30 @@ describe('#VacantesDigitales', () => {
   })
 
   describe('fetchVacancies', () => {
-    it('should page until totalPages consumed', async () => {
+    beforeEach(() => {
+      sandbox.stub(console, 'log')
+    })
+
+    it('should run profile stack searches, merge pages, and dedupe by id', async () => {
       const uut = new VacantesDigitales({ config: {} })
-      sandbox.stub(uut, '_getJson').callsFake((_path, query) => {
-        if (query.page === 1) {
+      sandbox.stub(uut, '_getJson').callsFake((path, query) => {
+        assert.strictEqual(path, 'search')
+        if (query.q === PROFILE_STACK_SEARCH_QUERIES[0]) {
           return Promise.resolve({
-            data: [{ id: 1 }],
-            pagination: { pages: 2 }
+            data: [{ id: 1, title: 'A', copy_seo_raw: 'x' }],
+            total: 1
           })
         }
         return Promise.resolve({
-          data: [{ id: 2 }],
-          pagination: { pages: 2 }
+          data: [{ id: 1, title: 'dup' }, { id: 2, title: 'B' }],
+          total: 2
         })
       })
 
       const rows = await uut.fetchVacancies()
       assert.strictEqual(rows.length, 2)
+      assert.ok(rows.some((r) => r.externalId === 1))
+      assert.ok(rows.some((r) => r.externalId === 2))
     })
 
     it('should normalize rows with array or non-array skills', async () => {
@@ -125,8 +135,7 @@ describe('#VacantesDigitales', () => {
             skills: {},
             date_posted_iso: '2020-01-01T00:00:00.000Z'
           }
-        ],
-        pagination: { pages: 1 }
+        ]
       })
 
       const [row] = await uut.fetchVacancies()
@@ -135,35 +144,40 @@ describe('#VacantesDigitales', () => {
       assert.include(row.summary, '…')
     })
 
-    it('should treat missing data array as empty', async () => {
+    it('should treat missing data array as empty across all search calls', async () => {
       const uut = new VacantesDigitales({ config: {} })
-      sandbox.stub(uut, '_getJson').resolves({
-        pagination: { pages: 1 }
-      })
+      sandbox.stub(uut, '_getJson').resolves({})
       const rows = await uut.fetchVacancies()
       assert.strictEqual(rows.length, 0)
     })
 
-    it('should default totalPages when pagination.pages is absent', async () => {
+    it('should drop vacancies matching ignore-stack terms before normalize', async () => {
       const uut = new VacantesDigitales({ config: {} })
-      sandbox.stub(uut, '_getJson').callsFake((_path, query) => {
-        assert.strictEqual(_path, 'vacancies')
-        assert.strictEqual(query.page, 1)
-        return Promise.resolve({
-          data: [{ id: 1 }],
-          pagination: {}
-        })
+      sandbox.stub(uut, '_getJson').resolves({
+        data: [
+          { id: 1, title: 'Python developer', copy_seo_raw: 'api' },
+          { id: 2, title: 'Node developer', copy_seo_raw: 'express' }
+        ]
       })
 
       const rows = await uut.fetchVacancies()
       assert.strictEqual(rows.length, 1)
+      assert.strictEqual(rows[0].externalId, 2)
+      sinon.assert.calledWithMatch(
+        console.log,
+        /skipped 1 ignored-stack/
+      )
     })
 
-    it('should treat non-numeric pagination.pages as single-page', async () => {
+    it('should load one merged batch when searches return rows', async () => {
       const uut = new VacantesDigitales({ config: {} })
-      sandbox.stub(uut, '_getJson').resolves({
-        data: [{ id: 1 }],
-        pagination: { pages: 'many' }
+      let n = 0
+      sandbox.stub(uut, '_getJson').callsFake((path) => {
+        assert.strictEqual(path, 'search')
+        n += 1
+        return Promise.resolve({
+          data: n === 1 ? [{ id: 1, title: 'x', copy_seo_raw: '' }] : []
+        })
       })
 
       const rows = await uut.fetchVacancies()
@@ -171,7 +185,136 @@ describe('#VacantesDigitales', () => {
     })
   })
 
+  describe('_matchesIgnoreStack', () => {
+    it('should document six human-readable ignore labels', () => {
+      assert.lengthOf(IGNORE_STACK_FOR_INGEST, 6)
+    })
+
+    it('should match each listed stack somewhere in title, body, keywords, or skills', () => {
+      const uut = new VacantesDigitales({ config: {} })
+      assert.isTrue(
+        uut._matchesIgnoreStack({
+          title: 'Python 3.11 backend',
+          copy_seo_raw: '',
+          keywords: [],
+          skills: []
+        })
+      )
+      assert.isTrue(
+        uut._matchesIgnoreStack({
+          title: 'Backend',
+          content: 'looking for Java engineers',
+          keywords: [],
+          skills: []
+        })
+      )
+      assert.isTrue(
+        uut._matchesIgnoreStack({
+          title: 'Web',
+          copy_seo_raw: 'Laravel PHP',
+          keywords: [],
+          skills: []
+        })
+      )
+      assert.isTrue(
+        uut._matchesIgnoreStack({
+          title: 'Senior .NET role',
+          copy_seo_raw: '',
+          keywords: [],
+          skills: []
+        })
+      )
+      assert.isTrue(
+        uut._matchesIgnoreStack({
+          title: 'Rails',
+          copy_seo_raw: '',
+          keywords: ['ruby'],
+          skills: []
+        })
+      )
+      assert.isTrue(
+        uut._matchesIgnoreStack({
+          title: 'Systems',
+          copy_seo_raw: '',
+          keywords: [],
+          skills: ['C++']
+        })
+      )
+      assert.isTrue(
+        uut._matchesIgnoreStack({
+          title: 'Win',
+          copy_seo_raw: 'dotnet and azure',
+          keywords: [],
+          skills: []
+        })
+      )
+      assert.isTrue(
+        uut._matchesIgnoreStack({
+          title: 'Mic',
+          copy_seo_raw: 'ASP.NET MVC',
+          keywords: [],
+          skills: []
+        })
+      )
+    })
+
+    it('should not match JavaScript or empty payloads', () => {
+      const uut = new VacantesDigitales({ config: {} })
+      assert.isFalse(
+        uut._matchesIgnoreStack({
+          title: 'JavaScript Developer',
+          copy_seo_raw: 'react node',
+          keywords: [],
+          skills: []
+        })
+      )
+      assert.isFalse(uut._matchesIgnoreStack({ title: '', copy_seo_raw: '' }))
+      assert.isFalse(uut._matchesIgnoreStack(null))
+    })
+  })
+
   describe('normalize', () => {
+    it('should fall back to summary when copy_seo_raw and content are absent', () => {
+      const uut = new VacantesDigitales({ config: {} })
+      const row = uut.normalize({
+        id: 1,
+        title: 'T',
+        slug: 's',
+        summary: 'short summary only',
+        keywords: [],
+        skills: []
+      })
+      assert.strictEqual(row.content, 'short summary only')
+      assert.strictEqual(row.summary, 'short summary only')
+    })
+
+    it('should map list/search API fields (content, apply_url, url, date_posted)', () => {
+      const uut = new VacantesDigitales({ config: {} })
+      const row = uut.normalize({
+        id: 99,
+        title: 'Job',
+        category: 'desarrollo',
+        slug: 'sl',
+        content: 'full body',
+        apply_url: 'https://apply.example',
+        url: 'https://vacantesdigitales.com/empleo-digital/desarrollo/sl',
+        date_posted: '2022-06-01T00:00:00.000Z',
+        location_type: 'remoto',
+        experience_level: 'senior',
+        keywords: [],
+        skills: ['Node.js']
+      })
+      assert.strictEqual(row.content, 'full body')
+      assert.strictEqual(row.applyUrl, 'https://apply.example')
+      assert.strictEqual(
+        row.sourceUrl,
+        'https://vacantesdigitales.com/empleo-digital/desarrollo/sl'
+      )
+      assert.strictEqual(row.datePosted?.getFullYear(), 2022)
+      assert.strictEqual(row.locationType, 'remoto')
+      assert.strictEqual(row.experienceLevel, 'senior')
+    })
+
     it('should map fields and preserve short summary', () => {
       const uut = new VacantesDigitales({ config: {} })
       const row = uut.normalize({
