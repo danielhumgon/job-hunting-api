@@ -25,6 +25,13 @@ describe('#JobSources', () => {
     })
   })
 
+  describe('sourcesSlug', () => {
+    it('should list sourceSlug for each registered source', () => {
+      const uut = new JobSources({ config: {} })
+      assert.deepEqual(uut.sourcesSlug, ['vacantesdigitales', 'x'])
+    })
+  })
+
   describe('start', () => {
     it('should call start on sources that implement it', async () => {
       const uut = new JobSources({ config: {} })

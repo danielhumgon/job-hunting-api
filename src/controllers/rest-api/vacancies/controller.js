@@ -26,6 +26,7 @@ class VacanciesRESTControllerLib {
     this.updateVacancy = this.updateVacancy.bind(this)
     this.deleteVacancy = this.deleteVacancy.bind(this)
     this.filterVacancies = this.filterVacancies.bind(this)
+    this.listVacancySources = this.listVacancySources.bind(this)
     this.handleError = this.handleError.bind(this)
   }
 
@@ -77,6 +78,30 @@ class VacanciesRESTControllerLib {
     try {
       const result = await this.useCases.vacancy.listAppliedVacancies()
       ctx.body = result
+    } catch (err) {
+      this.handleError(ctx, err)
+    }
+  }
+
+  /**
+   * @api {get} /vacancies/sources List configured job source slugs
+   * @apiName ListVacancySources
+   * @apiGroup REST Vacancies
+   *
+   * @apiExample Example usage:
+   * curl http://localhost:5020/vacancies/sources
+   *
+   * @apiSuccess {String[]} sources Registered job source slugs from adapters.jobSources.sourcesSlug
+   *
+   * @apiSuccessExample {json} Success-Response:
+   *     HTTP/1.1 200 OK
+   *     {
+   *       "sources": ["vacantesdigitales", "x"]
+   *     }
+   */
+  async listVacancySources (ctx) {
+    try {
+      ctx.body = { sources: this.adapters.jobSources.sourcesSlug }
     } catch (err) {
       this.handleError(ctx, err)
     }

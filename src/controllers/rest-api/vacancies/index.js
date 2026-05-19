@@ -52,6 +52,10 @@ class VacanciesRouter {
       async (ctx, next) => this.vacanciesController.filterVacancies(ctx, next)
     )
     this.router.get(
+      '/sources',
+      async (ctx, next) => this.vacanciesController.listVacancySources(ctx, next)
+    )
+    this.router.get(
       '/:page(\\d+)',
       async (ctx, next) => this.vacanciesController.listVacancies(ctx, next)
     )

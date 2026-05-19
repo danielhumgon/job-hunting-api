@@ -16,6 +16,10 @@ The design goal is **many job boards and APIs, one pipeline**:
 
 Each successful fetch logs how many **unique** vacancies were returned and, when duplicates appeared across queries, how many **raw** rows were returned before dedupe (`VacantesDigitales.fetchVacancies: …`).
 
+**X API v2** (`x`) ingests hiring signals from **[`GET /2/tweets/search/recent`](https://developer.x.com/en/docs/twitter-api/tweets/search/api-reference/get-tweets-search-recent)** using an app-only **Bearer** token (`X_API_BEARER_TOKEN` → `xApiBearerToken` in [`config/env/common.js`](./config/env/common.js)). Ingestion runs one recent-search request per query in [`src/adapters/job-sources/x-api.js`](./src/adapters/job-sources/x-api.js) as `PROFILE_STACK_SEARCH_QUERIES` (stack keywords aligned with [`src/adapters/llm/vacancy-scoring-prompt.md`](./src/adapters/llm/vacancy-scoring-prompt.md), plus hiring keywords and `-is:retweet`). Tweets are merged across queries, **deduped by tweet `id`**, and normalized to the canonical shape (`sourceUrl` is the status on x.com; author display name becomes `company` when present). When the bearer token is missing, the source **no-ops** on each tick.
+
+Each successful fetch logs how many **unique** tweets were returned and, when duplicates appeared across queries, how many **raw** rows were returned before dedupe (`XApiJobSource.fetchVacancies: …`).
+
 New sources are added by implementing the same contract and registering the class in the `JobSources` registry. Field-level rules for the first source and the HTTP surface are documented in [dev-docs/vacantesdigitales/specs.md](./dev-docs/vacantesdigitales/specs.md) (note: the adapter’s live HTTP usage may be newer than portions of that doc—**`vacantesdigitales.js`** is the source of truth for which endpoints are called).
 
 ---
@@ -70,6 +74,7 @@ New features (additional sources, API changes, scoring behavior) should be **doc
 
    - `DISABLE_IPFS=1` if you are not using the embedded IPFS node yet  
    - Ingestion: `INGEST_ON_BOOT`, `INGEST_INTERVAL_MS`  
+   - X API (optional): `X_API_BEARER_TOKEN` — without it, the `x` source is skipped on each tick  
    - LLM: `LLM_API_URL`, `LLM_MODEL`, and `LLM_API_KEY` or `OLLAMA_API_KEY` as needed  
 
    All variables ultimately flow through **`config/env/common.js`** (single place to inspect defaults and names).
@@ -106,7 +111,8 @@ See **[production/docker/README.md](./production/docker/README.md)** for the thr
 - A **timer** runs vacancy ingestion on `INGEST_INTERVAL_MS` (default: three hours).  
 - If **`INGEST_ON_BOOT=true`** and the environment is not `test`, one run happens shortly after timers start.  
 - Logs include **metrics** for each tick (counts per source, LLM failures, persistence stats).  
-- **Vacantes Digitales** also prints a line such as `VacantesDigitales.fetchVacancies: N unique vacancies` when that source finishes its `/api/search` batch (see multi-source section above).
+- **Vacantes Digitales** also prints a line such as `VacantesDigitales.fetchVacancies: N unique vacancies` when that source finishes its `/api/search` batch (see multi-source section above).  
+- **X API** prints a line such as `XApiJobSource.fetchVacancies: N unique tweets` when recent search completes (skipped when `X_API_BEARER_TOKEN` is unset).
 
 ### Vacancies API (examples)
 
@@ -138,6 +144,7 @@ Inline apidoc comments can be compiled with **`npm run docs`**. Open the generat
 | Env vars / defaults | [`config/env/common.js`](./config/env/common.js) |
 | Example `.env` | [`.env-example`](./.env-example) (copy to `.env`) |
 | Ingest timing, LLM URL/model, retries, min score | `INGEST_*`, `LLM_*`, `JOB_INGESTION_VERSION`, `MIN_VACANCY_LLM_SCORE`, etc. |
+| X API bearer token | `X_API_BEARER_TOKEN` → `xApiBearerToken` in [`config/env/common.js`](./config/env/common.js); search queries in [`src/adapters/job-sources/x-api.js`](./src/adapters/job-sources/x-api.js) |
 
 ---
 

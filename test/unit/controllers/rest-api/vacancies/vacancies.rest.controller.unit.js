@@ -21,7 +21,10 @@ function makeUut (sandbox, overrides = {}) {
     }
   }
   const deps = {
-    adapters: { localdb: {} },
+    adapters: {
+      localdb: {},
+      jobSources: { sourcesSlug: ['vacantesdigitales', 'x'] }
+    },
     useCases
   }
   return { uut: new VacanciesRESTControllerLib(deps), useCases }
@@ -46,7 +49,10 @@ describe('#Vacancies-REST-controller', () => {
 
     it('should throw when useCases is missing', () => {
       assert.throws(
-        () => new VacanciesRESTControllerLib({ adapters: { localdb: {} } }),
+        () =>
+          new VacanciesRESTControllerLib({
+            adapters: { localdb: {}, jobSources: { sourcesSlug: [] } }
+          }),
         /Instance of Use Cases library required/
       )
     })
@@ -94,6 +100,28 @@ describe('#Vacancies-REST-controller', () => {
       await uut.listVacancies(ctx)
       assert.strictEqual(ctx.status, 418)
       assert.strictEqual(ctx.body, 'Error')
+    })
+  })
+
+  describe('listVacancySources()', () => {
+    it('should set ctx.body from adapters.jobSources.sourcesSlug', async () => {
+      const { uut } = makeUut(sandbox)
+      const ctx = {}
+      await uut.listVacancySources(ctx)
+      assert.deepStrictEqual(ctx.body, { sources: ['vacantesdigitales', 'x'] })
+    })
+
+    it('should map errors through handleError', async () => {
+      const { uut } = makeUut(sandbox)
+      Object.defineProperty(uut.adapters, 'jobSources', {
+        get () {
+          throw new Error('broken')
+        }
+      })
+      const ctx = {}
+      await uut.listVacancySources(ctx)
+      assert.strictEqual(ctx.status, 422)
+      assert.strictEqual(ctx.body, 'broken')
     })
   })
 
