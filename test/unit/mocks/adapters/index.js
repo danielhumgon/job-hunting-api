@@ -155,6 +155,7 @@ export default {
   localdb,
   jobSources: {
     sources: [],
+    sourcesSlug: ['vacantesdigitales', 'x'],
     getActiveAdapters () {
       return this.sources
     },

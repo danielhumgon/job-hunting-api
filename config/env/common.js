@@ -178,6 +178,11 @@ export default {
 
   jobIngestionVersion: process.env.JOB_INGESTION_VERSION || '1',
 
+  /** X API v2 app-only bearer (`Authorization: Bearer`); empty skips X ingestion. */
+  xApiBearerToken: process.env.X_API_BEARER_TOKEN
+    ? process.env.X_API_BEARER_TOKEN
+    : '',
+
   /** OpenAI-compatible base URL — include `/v1` (e.g. local Ollama). */
   llmApiUrl: process.env.LLM_API_URL || 'http://127.0.0.1:11434/v1',
   llmModel: process.env.LLM_MODEL || 'gemma4',

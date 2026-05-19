@@ -4,6 +4,7 @@
 
 import config from '../../../config/index.js'
 import VacantesDigitales from './vacantesdigitales.js'
+import XApiJobSource from './x-api.js'
 
 class JobSources {
   constructor (localConfig = {}) {
@@ -11,8 +12,17 @@ class JobSources {
 
     /** Active ingestion adapters — append new source classes here. */
     this.sources = [
-      new VacantesDigitales({ config: cfg })
+      new VacantesDigitales({ config: cfg }),
+      new XApiJobSource({ config: cfg })
     ]
+
+    this.sourcesSlug = this._buildSourcesSlug()
+  }
+
+  _buildSourcesSlug () {
+    return this.sources.map(
+      (source) => source.sourceSlug || source.constructor?.name || 'unknown'
+    )
   }
 
   /**
@@ -47,7 +57,6 @@ class JobSources {
 
     for (const source of this.sources) {
       const name = source.sourceSlug || source.constructor?.name || 'unknown'
-
       if (typeof source.fetchVacancies !== 'function') {
         sourcesSkippedNoFetcher += 1
         perSource.push({ source: name, count: 0, ok: true, skipped: true })
@@ -84,3 +93,4 @@ class JobSources {
 
 export default JobSources
 export { VacantesDigitales }
+export { XApiJobSource }
