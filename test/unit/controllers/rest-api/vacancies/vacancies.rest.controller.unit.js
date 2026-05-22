@@ -23,7 +23,9 @@ function makeUut (sandbox, overrides = {}) {
   const deps = {
     adapters: {
       localdb: {},
-      jobSources: { sourcesSlug: ['vacantesdigitales', 'x'] }
+      jobSources: {
+        sourcesSlug: ['vacantesdigitales', 'jooble', 'getonbrd', 'x']
+      }
     },
     useCases
   }
@@ -108,7 +110,9 @@ describe('#Vacancies-REST-controller', () => {
       const { uut } = makeUut(sandbox)
       const ctx = {}
       await uut.listVacancySources(ctx)
-      assert.deepStrictEqual(ctx.body, { sources: ['vacantesdigitales', 'x'] })
+      assert.deepStrictEqual(ctx.body, {
+        sources: ['vacantesdigitales', 'jooble', 'getonbrd', 'x']
+      })
     })
 
     it('should map errors through handleError', async () => {

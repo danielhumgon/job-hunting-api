@@ -96,7 +96,7 @@ class VacanciesRESTControllerLib {
    * @apiSuccessExample {json} Success-Response:
    *     HTTP/1.1 200 OK
    *     {
-   *       "sources": ["vacantesdigitales", "x"]
+   *       "sources": ["vacantesdigitales", "jooble", "getonbrd", "x"]
    *     }
    */
   async listVacancySources (ctx) {

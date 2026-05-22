@@ -28,7 +28,12 @@ describe('#JobSources', () => {
   describe('sourcesSlug', () => {
     it('should list sourceSlug for each registered source', () => {
       const uut = new JobSources({ config: {} })
-      assert.deepEqual(uut.sourcesSlug, ['vacantesdigitales', 'x'])
+      assert.deepEqual(uut.sourcesSlug, [
+        'vacantesdigitales',
+        'jooble',
+        'getonbrd',
+        'x'
+      ])
     })
   })
 
@@ -128,6 +133,22 @@ describe('#JobSources', () => {
       const cfg = { jobIngestionVersion: 'custom-v' }
       const uut = new JobSources({ config: cfg })
       assert.strictEqual(uut.sources[0].config.jobIngestionVersion, 'custom-v')
+    })
+
+    it('should use default app config when constructor config omitted', () => {
+      const uut = new JobSources()
+      assert.isObject(uut.sources[0].config)
+      assert.isAtLeast(uut.sources.length, 4)
+    })
+  })
+
+  describe('sourcesSlug fallbacks', () => {
+    it('should use constructor name when sourceSlug missing', () => {
+      class PlainSource {}
+      const uut = new JobSources({ config: {} })
+      uut.sources = [new PlainSource()]
+      uut.sourcesSlug = uut._buildSourcesSlug()
+      assert.deepEqual(uut.sourcesSlug, ['PlainSource'])
     })
   })
 })

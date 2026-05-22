@@ -25,6 +25,30 @@ describe('#config-env-branches', () => {
     }
   })
 
+  it('should default joobleApiKey when JOOBLE_API_KEY is unset', async () => {
+    const prev = process.env.JOOBLE_API_KEY
+    try {
+      delete process.env.JOOBLE_API_KEY
+      const m = await import('../../../config/env/common.js?joobleDef=' + Date.now())
+      assert.strictEqual(m.default.joobleApiKey, '')
+    } finally {
+      if (prev === undefined) delete process.env.JOOBLE_API_KEY
+      else process.env.JOOBLE_API_KEY = prev
+    }
+  })
+
+  it('should derive joobleApiKey from JOOBLE_API_KEY', async () => {
+    const prev = process.env.JOOBLE_API_KEY
+    try {
+      process.env.JOOBLE_API_KEY = 'test-jooble-key'
+      const m = await import('../../../config/env/common.js?jooble=' + Date.now())
+      assert.strictEqual(m.default.joobleApiKey, 'test-jooble-key')
+    } finally {
+      if (prev === undefined) delete process.env.JOOBLE_API_KEY
+      else process.env.JOOBLE_API_KEY = prev
+    }
+  })
+
   it('should pick database URL from DBURL or default in production env', async () => {
     const prev = process.env.DBURL
     try {
