@@ -183,6 +183,9 @@ export default {
     ? process.env.X_API_BEARER_TOKEN
     : '',
 
+  /** Jooble REST API key (URL path segment); empty skips Jooble ingestion. */
+  joobleApiKey: process.env.JOOBLE_API_KEY ? process.env.JOOBLE_API_KEY : '',
+
   /** OpenAI-compatible base URL — include `/v1` (e.g. local Ollama). */
   llmApiUrl: process.env.LLM_API_URL || 'http://127.0.0.1:11434/v1',
   llmModel: process.env.LLM_MODEL || 'gemma4',

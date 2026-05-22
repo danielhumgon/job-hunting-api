@@ -20,6 +20,14 @@ Each successful fetch logs how many **unique** vacancies were returned and, when
 
 Each successful fetch logs how many **unique** tweets were returned and, when duplicates appeared across queries, how many **raw** rows were returned before dedupe (`XApiJobSource.fetchVacancies: …`).
 
+**Get on Board** (`getonbrd`) ingests published jobs from the public **[`GET /api/v0/search/jobs`](https://www.getonbrd.com/api-doc.html)** endpoint (no API key). Ingestion runs one paginated search per query in [`src/adapters/job-sources/getonbrd.js`](./src/adapters/job-sources/getonbrd.js) as `PROFILE_STACK_SEARCH_QUERIES` (aligned with [`src/adapters/llm/vacancy-scoring-prompt.md`](./src/adapters/llm/vacancy-scoring-prompt.md)), with `remote=true` by default. Results are merged and **deduped by job `id`**, then normalized (`sourceUrl` is `links.public_url`). API base URL, language, remote filter, and page size are fixed in the adapter (no env overrides).
+
+Each successful fetch logs how many **unique** vacancies were returned (`GetOnBrdJobSource.fetchVacancies: …`).
+
+**Jooble** (`jooble`) ingests jobs from **[`POST https://jooble.org/api/{api_key}`](https://jooble.org/api/about)** ([REST docs](https://help.jooble.org/en/support/solutions/articles/60001448238-rest-api-documentation)). Set `JOOBLE_API_KEY` in `.env` (key is the URL path segment). Ingestion runs one paginated search per query in [`src/adapters/job-sources/jooble.js`](./src/adapters/job-sources/jooble.js) as `PROFILE_STACK_SEARCH_QUERIES` (with ` remote` appended by default), up to 2 pages per query (30 jobs/page). Results are merged, **deduped by job `id`**, HTML snippets are stripped, then normalized (`sourceUrl` / `applyUrl` from `link`). When the API key is missing, the source **no-ops** on each tick.
+
+Each successful fetch logs `JoobleJobSource.fetchVacancies: …`.
+
 New sources are added by implementing the same contract and registering the class in the `JobSources` registry. Field-level rules for the first source and the HTTP surface are documented in [dev-docs/vacantesdigitales/specs.md](./dev-docs/vacantesdigitales/specs.md) (note: the adapter’s live HTTP usage may be newer than portions of that doc—**`vacantesdigitales.js`** is the source of truth for which endpoints are called).
 
 ---
@@ -145,6 +153,8 @@ Inline apidoc comments can be compiled with **`npm run docs`**. Open the generat
 | Example `.env` | [`.env-example`](./.env-example) (copy to `.env`) |
 | Ingest timing, LLM URL/model, retries, min score | `INGEST_*`, `LLM_*`, `JOB_INGESTION_VERSION`, `MIN_VACANCY_LLM_SCORE`, etc. |
 | X API bearer token | `X_API_BEARER_TOKEN` → `xApiBearerToken` in [`config/env/common.js`](./config/env/common.js); search queries in [`src/adapters/job-sources/x-api.js`](./src/adapters/job-sources/x-api.js) |
+| Get on Board API | No env vars; defaults and search queries in [`src/adapters/job-sources/getonbrd.js`](./src/adapters/job-sources/getonbrd.js) |
+| Jooble API key | `JOOBLE_API_KEY` → `joobleApiKey` in [`config/env/common.js`](./config/env/common.js); other Jooble settings in [`src/adapters/job-sources/jooble.js`](./src/adapters/job-sources/jooble.js) |
 
 ---
 

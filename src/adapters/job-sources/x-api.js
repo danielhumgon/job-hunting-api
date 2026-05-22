@@ -74,8 +74,10 @@ export function normalizeXTweet (tweet, author, sourceSlug, ingestionVersion) {
     : `https://x.com/i/web/status/${externalId}`
 
   let datePosted
+  console.log('tweet', tweet)
   if (typeof tweet.created_at === 'string') {
     const d = new Date(tweet.created_at)
+    console.log('d', d.toDateString())
     if (!Number.isNaN(d.getTime())) datePosted = d
   }
 
@@ -201,7 +203,7 @@ export default class XApiJobSource {
         headers: this._buildAuthHeaders(),
         params
       })
-
+      console.log('getJson data', data)
       return data
     } catch (err) {
       const status = err.response && err.response.status

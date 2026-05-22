@@ -156,7 +156,7 @@ class VacancyLib {
 
       const [data, total] = await Promise.all([
         this.VacancyModel.find(filter)
-          .sort({ llmScore: -1, datePosted: -1 })
+          .sort({ datePosted: -1 })
           .skip((page - 1) * perPage)
           .limit(perPage)
           .lean(),
