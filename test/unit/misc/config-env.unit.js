@@ -49,6 +49,30 @@ describe('#config-env-branches', () => {
     }
   })
 
+  it('should default apifyApiToken when APIFY_API_TOKEN is unset', async () => {
+    const prev = process.env.APIFY_API_TOKEN
+    try {
+      delete process.env.APIFY_API_TOKEN
+      const m = await import('../../../config/env/common.js?apifyDef=' + Date.now())
+      assert.strictEqual(m.default.apifyApiToken, '')
+    } finally {
+      if (prev === undefined) delete process.env.APIFY_API_TOKEN
+      else process.env.APIFY_API_TOKEN = prev
+    }
+  })
+
+  it('should derive apifyApiToken from APIFY_API_TOKEN', async () => {
+    const prev = process.env.APIFY_API_TOKEN
+    try {
+      process.env.APIFY_API_TOKEN = 'apify-test'
+      const m = await import('../../../config/env/common.js?apify=' + Date.now())
+      assert.strictEqual(m.default.apifyApiToken, 'apify-test')
+    } finally {
+      if (prev === undefined) delete process.env.APIFY_API_TOKEN
+      else process.env.APIFY_API_TOKEN = prev
+    }
+  })
+
   it('should pick database URL from DBURL or default in production env', async () => {
     const prev = process.env.DBURL
     try {

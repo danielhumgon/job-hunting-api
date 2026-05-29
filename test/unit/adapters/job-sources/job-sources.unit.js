@@ -32,7 +32,8 @@ describe('#JobSources', () => {
         'vacantesdigitales',
         'jooble',
         'getonbrd',
-        'x'
+        'x',
+        'linkedin'
       ])
     })
   })
@@ -138,7 +139,7 @@ describe('#JobSources', () => {
     it('should use default app config when constructor config omitted', () => {
       const uut = new JobSources()
       assert.isObject(uut.sources[0].config)
-      assert.isAtLeast(uut.sources.length, 4)
+      assert.isAtLeast(uut.sources.length, 5)
     })
   })
 
