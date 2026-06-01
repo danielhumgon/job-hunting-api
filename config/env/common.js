@@ -186,6 +186,9 @@ export default {
   /** Jooble REST API key (URL path segment); empty skips Jooble ingestion. */
   joobleApiKey: process.env.JOOBLE_API_KEY ? process.env.JOOBLE_API_KEY : '',
 
+  /** Apify API token; empty skips LinkedIn (Apify actor) ingestion. */
+  apifyApiToken: process.env.APIFY_API_TOKEN ? process.env.APIFY_API_TOKEN : '',
+
   /** OpenAI-compatible base URL — include `/v1` (e.g. local Ollama). */
   llmApiUrl: process.env.LLM_API_URL || 'http://127.0.0.1:11434/v1',
   llmModel: process.env.LLM_MODEL || 'gemma4',

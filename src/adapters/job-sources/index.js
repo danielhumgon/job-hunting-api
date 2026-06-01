@@ -6,6 +6,7 @@ import config from '../../../config/index.js'
 import GetOnBrdJobSource from './getonbrd.js'
 import JoobleJobSource from './jooble.js'
 import LeverJobSource from './lever.js'
+import LinkedInJobSource from './linkedin.js'
 import VacantesDigitales from './vacantesdigitales.js'
 import XApiJobSource from './x-api.js'
 
@@ -18,7 +19,8 @@ class JobSources {
       new VacantesDigitales({ config: cfg }),
       new JoobleJobSource({ config: cfg }),
       new GetOnBrdJobSource({ config: cfg }),
-      new XApiJobSource({ config: cfg })
+      new XApiJobSource({ config: cfg }),
+      new LinkedInJobSource({ config: cfg })
 
       // NOTE: Reviewing this source .
       // new LeverJobSource({ config: cfg })
@@ -104,5 +106,6 @@ export default JobSources
 export { GetOnBrdJobSource }
 export { JoobleJobSource }
 export { LeverJobSource }
+export { LinkedInJobSource }
 export { VacantesDigitales }
 export { XApiJobSource }

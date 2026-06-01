@@ -28,6 +28,10 @@ Each successful fetch logs how many **unique** vacancies were returned (`GetOnBr
 
 Each successful fetch logs `JoobleJobSource.fetchVacancies: …`.
 
+**LinkedIn** (`linkedin`) ingests jobs via Apify actor **[`worldunboxer~rapid-linkedin-scraper`](https://apify.com/worldunboxer/rapid-linkedin-scraper)**. Set `APIFY_API_TOKEN` in `.env`. Each ingestion tick runs one actor job per query in [`src/adapters/job-sources/linkedin.js`](./src/adapters/job-sources/linkedin.js) as `PROFILE_STACK_SEARCH_QUERIES` (aligned with [`src/adapters/llm/vacancy-scoring-prompt.md`](./src/adapters/llm/vacancy-scoring-prompt.md)). Results are merged, **deduped by job id or URL**, then normalized. When the token is missing, the source **no-ops** on each tick.
+
+Each successful fetch logs `LinkedInJobSource.fetchVacancies: …`.
+
 New sources are added by implementing the same contract and registering the class in the `JobSources` registry. Field-level rules for the first source and the HTTP surface are documented in [dev-docs/vacantesdigitales/specs.md](./dev-docs/vacantesdigitales/specs.md) (note: the adapter’s live HTTP usage may be newer than portions of that doc—**`vacantesdigitales.js`** is the source of truth for which endpoints are called).
 
 ---
@@ -155,6 +159,7 @@ Inline apidoc comments can be compiled with **`npm run docs`**. Open the generat
 | X API bearer token | `X_API_BEARER_TOKEN` → `xApiBearerToken` in [`config/env/common.js`](./config/env/common.js); search queries in [`src/adapters/job-sources/x-api.js`](./src/adapters/job-sources/x-api.js) |
 | Get on Board API | No env vars; defaults and search queries in [`src/adapters/job-sources/getonbrd.js`](./src/adapters/job-sources/getonbrd.js) |
 | Jooble API key | `JOOBLE_API_KEY` → `joobleApiKey` in [`config/env/common.js`](./config/env/common.js); other Jooble settings in [`src/adapters/job-sources/jooble.js`](./src/adapters/job-sources/jooble.js) |
+| LinkedIn / Apify | `APIFY_API_TOKEN` → `apifyApiToken` in [`config/env/common.js`](./config/env/common.js); adapter defaults in [`src/adapters/job-sources/linkedin.js`](./src/adapters/job-sources/linkedin.js) |
 
 ---
 
