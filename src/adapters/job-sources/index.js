@@ -16,10 +16,12 @@ class JobSources {
 
     /** Active ingestion adapters — append new source classes here. */
     this.sources = [
+      // Commented for debugging purposes
       new VacantesDigitales({ config: cfg }),
       new JoobleJobSource({ config: cfg }),
       new GetOnBrdJobSource({ config: cfg }),
       new XApiJobSource({ config: cfg }),
+
       new LinkedInJobSource({ config: cfg })
 
       // NOTE: Reviewing this source .

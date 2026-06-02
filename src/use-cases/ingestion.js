@@ -3,6 +3,7 @@
 */
 
 import VacancyEntity from '../entities/vacancy.js'
+import { vacancyHasUnsupportedLanguage } from '../adapters/llm/index.js'
 
 function dedupeBySourceAndExternalId (rows) {
   if (!Array.isArray(rows)) return []
@@ -42,6 +43,7 @@ class IngestionUseCases {
       const rows = dedupeBySourceAndExternalId(fetched)
 
       let skippedInvalid = 0
+      let skippedUnsupportedLanguage = 0
       let llmFailed = 0
       let persisted = 0
       let persistErrors = 0
@@ -61,6 +63,15 @@ class IngestionUseCases {
         const llmFields = await this.adapters.llm.score(row)
         if (llmFields.llmStatus === 'failed') {
           llmFailed += 1
+        }
+        if (vacancyHasUnsupportedLanguage(llmFields)) {
+          skippedUnsupportedLanguage += 1
+          console.log(
+            'ingestion: skipped unsupported language vacancy:',
+            row.source,
+            row.externalId
+          )
+          continue
         }
 
         const doc = { ...row, ...llmFields }
@@ -90,6 +101,7 @@ class IngestionUseCases {
           fetchedRows: Array.isArray(fetched) ? fetched.length : 0,
           dedupedRows: rows.length,
           skippedInvalid,
+          skippedUnsupportedLanguage,
           llmFailed,
           persisted,
           persistErrors,
