@@ -172,6 +172,39 @@ describe('#IngestionUseCases', () => {
       assert(adapters.llm.score.notCalled)
     })
 
+    it('should skip persistence when LLM flags unsupported language', async () => {
+      const jobSources = {
+        ingestVacancies: sandbox.stub().resolves({
+          vacancies: [validRow()],
+          metrics: {}
+        })
+      }
+      const adapters = {
+        jobSources,
+        llm: {
+          score: sandbox.stub().resolves({
+            llmStatus: 'completed',
+            llmScore: 0,
+            llmReasons: ['not english or spanish'],
+            llmFlags: ['unsupported_language'],
+            llmModel: 'm',
+            llmPromptVersion: '1',
+            llmClassifiedAt: new Date(),
+            llmRawOutput: {},
+            belowMinScore: true
+          })
+        },
+        localdb: { Vacancy: { updateOne: sandbox.stub() } }
+      }
+      sandbox.stub(console, 'log')
+      const uut = new IngestionUseCases({ adapters })
+      const out = await uut.ingestVacancies()
+
+      assert.strictEqual(out.metrics.skippedUnsupportedLanguage, 1)
+      assert.strictEqual(out.metrics.persisted, 0)
+      assert(adapters.localdb.Vacancy.updateOne.notCalled)
+    })
+
     it('should count persistErrors when updateOne rejects', async () => {
       const jobSources = {
         ingestVacancies: sandbox.stub().resolves({

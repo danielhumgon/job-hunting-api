@@ -20,6 +20,22 @@ const llmJsonSchema = z.object({
   flags: z.array(z.string()).default([])
 })
 
+/** LLM flag when title/body are not primarily English or Spanish. */
+export const LLM_UNSUPPORTED_LANGUAGE_FLAG = 'unsupported_language'
+
+/**
+ * @param {object} [llmFields]
+ * @param {string[]} [llmFields.llmFlags]
+ * @returns {boolean}
+ */
+export function vacancyHasUnsupportedLanguage (llmFields = {}) {
+  const flags = llmFields.llmFlags
+  if (!Array.isArray(flags)) return false
+  return flags.some(
+    (flag) => String(flag).trim().toLowerCase() === LLM_UNSUPPORTED_LANGUAGE_FLAG
+  )
+}
+
 function clamp01 (n) {
   if (Number.isNaN(n)) return 0
   return Math.min(1, Math.max(0, n))
@@ -190,14 +206,18 @@ export default class LlmAdapter {
       }
 
       const { score, reasons, flags } = validated.data
-      const llmScore = clamp01(score)
+      let llmScore = clamp01(score)
       const llmReasons = dedupeLower(reasons)
       const llmFlags = dedupeLower(flags)
+      if (vacancyHasUnsupportedLanguage({ llmFlags })) {
+        llmScore = 0
+      }
       const min = this.config.minVacancyLlmScore
       const belowMinScore =
-        typeof min === 'number' && !Number.isNaN(min) && typeof llmScore === 'number'
+        vacancyHasUnsupportedLanguage({ llmFlags }) ||
+        (typeof min === 'number' && !Number.isNaN(min) && typeof llmScore === 'number'
           ? llmScore < min
-          : false
+          : false)
 
       return {
         llmScore,

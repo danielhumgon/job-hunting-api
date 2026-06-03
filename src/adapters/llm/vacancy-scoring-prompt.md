@@ -16,6 +16,12 @@ Check for matches in these core areas:
 * **Unwanted Languages:** Python, Java, PHP, .NET, Ruby, C++.
 * **Constraint Rule:** If any "Unwanted Language" is the primary core of the role, the score must not exceed **0.3**.
 
+## Post Language (Hard Filter)
+* **Accepted posting languages:** **English** or **Spanish** only (evaluate `title`, `summary`, and `content` together).
+* **Rejected:** Portuguese, French, German, Italian, and any other language that is clearly **not** English or Spanish.
+* **Mixed postings:** Accept only when English or Spanish is clearly the primary language of the job description.
+* **Rule:** If the vacancy is not primarily in English or Spanish, set **`score` to `0.0`**, add a reason such as `"not english or spanish"`, and include the flag **`unsupported_language`**. Do not score stack fit for rejected-language posts.
+
 ## Remote-First & Geography (High Priority)
 
 Treat **where** the work happens as a hard filter on the final score, not a minor note.

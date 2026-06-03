@@ -9,14 +9,20 @@ import sinon from 'sinon'
 import LinkedInJobSource, {
   APIFY_API_BASE,
   LINKEDIN_DEFAULT_MAX_ITEMS_PER_QUERY,
+  LINKEDIN_DEFAULT_POSTED_WITHIN,
+  LINKEDIN_MAX_POST_AGE_DAYS,
   PROFILE_STACK_SEARCH_QUERIES,
   buildLinkedInBodyText,
+  buildLinkedInIngestHaystack,
   flattenLinkedInDatasetItems,
   inferLinkedInLocationType,
+  isLinkedInPostTooOld,
   matchesIgnoreStackForIngest,
   normalizeLinkedInJob,
   parseLinkedInDatePosted,
+  parseLinkedInRelativeTimePosted,
   pickLinkedInField,
+  subtractLinkedInTimeUnit,
   unwrapApifyRun
 } from '../../../../src/adapters/job-sources/linkedin.js'
 
@@ -176,6 +182,106 @@ describe('#LinkedInJobSource', () => {
       assert.instanceOf(parseLinkedInDatePosted(new Date()), Date)
       assert.strictEqual(parseLinkedInDatePosted('bad'), undefined)
     })
+
+    it('should parse relative English and Spanish posting times', () => {
+      const now = new Date('2026-06-01T12:00:00.000Z')
+      const twoDays = parseLinkedInDatePosted('2 days ago', now)
+      assert.strictEqual(twoDays.toISOString(), '2026-05-30T12:00:00.000Z')
+
+      const oneWeek = parseLinkedInRelativeTimePosted('hace 1 semana', now)
+      assert.strictEqual(oneWeek.toISOString(), '2026-05-25T12:00:00.000Z')
+      assert.instanceOf(parseLinkedInDatePosted('just now', now), Date)
+    })
+  })
+
+  describe('subtractLinkedInTimeUnit', () => {
+    it('should subtract supported units', () => {
+      const now = new Date('2026-06-01T12:00:00.000Z')
+      assert.strictEqual(
+        subtractLinkedInTimeUnit(now, 2, 'week').toISOString(),
+        '2026-05-18T12:00:00.000Z'
+      )
+      assert.strictEqual(
+        subtractLinkedInTimeUnit(now, 3, 'day').toISOString(),
+        '2026-05-29T12:00:00.000Z'
+      )
+      assert.strictEqual(
+        subtractLinkedInTimeUnit(now, 2, 'hour').toISOString(),
+        '2026-06-01T10:00:00.000Z'
+      )
+      assert.strictEqual(
+        subtractLinkedInTimeUnit(now, 15, 'minute').toISOString(),
+        '2026-06-01T11:45:00.000Z'
+      )
+      assert.strictEqual(
+        subtractLinkedInTimeUnit(now, 1, 'month').toISOString(),
+        '2026-05-01T12:00:00.000Z'
+      )
+      assert.strictEqual(
+        subtractLinkedInTimeUnit(now, 1, 'unknown').toISOString(),
+        now.toISOString()
+      )
+    })
+  })
+
+  describe('parseLinkedInRelativeTimePosted', () => {
+    it('should parse additional relative formats', () => {
+      const now = new Date('2026-06-01T12:00:00.000Z')
+      assert.strictEqual(
+        parseLinkedInRelativeTimePosted('an hour ago', now).toISOString(),
+        '2026-06-01T11:00:00.000Z'
+      )
+      assert.strictEqual(
+        parseLinkedInRelativeTimePosted('hace 2 horas', now).toISOString(),
+        '2026-06-01T10:00:00.000Z'
+      )
+      assert.strictEqual(
+        parseLinkedInRelativeTimePosted('hace un día', now).toISOString(),
+        '2026-05-31T12:00:00.000Z'
+      )
+      assert.strictEqual(
+        parseLinkedInRelativeTimePosted('hace una semana', now).toISOString(),
+        '2026-05-25T12:00:00.000Z'
+      )
+      assert.isUndefined(parseLinkedInRelativeTimePosted('unknown time', now))
+      assert.isUndefined(parseLinkedInRelativeTimePosted('', now))
+    })
+  })
+
+  describe('buildLinkedInIngestHaystack', () => {
+    it('should join title body and function', () => {
+      const haystack = buildLinkedInIngestHaystack({
+        job_title: 'Dev',
+        job_description: 'Node',
+        job_function: 'Engineering'
+      })
+      assert.include(haystack, 'Dev')
+      assert.include(haystack, 'Node')
+      assert.include(haystack, 'Engineering')
+    })
+  })
+
+  describe('isLinkedInPostTooOld', () => {
+    it('should drop posts older than max age', () => {
+      const now = new Date('2026-06-01T12:00:00.000Z')
+      assert.isTrue(
+        isLinkedInPostTooOld(
+          { time_posted: '2 months ago' },
+          LINKEDIN_MAX_POST_AGE_DAYS,
+          now
+        )
+      )
+      assert.isFalse(
+        isLinkedInPostTooOld(
+          { time_posted: '2 days ago' },
+          LINKEDIN_MAX_POST_AGE_DAYS,
+          now
+        )
+      )
+      assert.isFalse(
+        isLinkedInPostTooOld({ job_title: 'No date' }, LINKEDIN_MAX_POST_AGE_DAYS, now)
+      )
+    })
   })
 
   describe('matchesIgnoreStackForIngest', () => {
@@ -215,6 +321,8 @@ describe('#LinkedInJobSource', () => {
       )
       assert.strictEqual(uut._pollIntervalMs, 5000)
       assert.strictEqual(uut._pollMaxAttempts, 60)
+      assert.strictEqual(uut._postedWithin, LINKEDIN_DEFAULT_POSTED_WITHIN)
+      assert.strictEqual(uut._maxPostAgeDays, LINKEDIN_MAX_POST_AGE_DAYS)
       assert.isTrue(uut._useApifyProxy)
     })
 
@@ -229,6 +337,7 @@ describe('#LinkedInJobSource', () => {
       assert.strictEqual(input.job_title, 'Node.js')
       assert.strictEqual(input.location, 'Worldwide')
       assert.strictEqual(input.jobs_entries, LINKEDIN_DEFAULT_MAX_ITEMS_PER_QUERY)
+      assert.strictEqual(input.posted_within, LINKEDIN_DEFAULT_POSTED_WITHIN)
       assert.deepEqual(input.proxyConfiguration, { useApifyProxy: true })
     })
 
@@ -497,7 +606,8 @@ describe('#LinkedInJobSource', () => {
             job_id: '1',
             job_title: 'Node job',
             job_location: 'Remote',
-            job_description: 'express'
+            job_description: 'express backend developer experience',
+            time_posted: '1 day ago'
           }
         ])
         .onSecondCall()
@@ -507,7 +617,8 @@ describe('#LinkedInJobSource', () => {
             job_id: '2',
             job_title: 'React job',
             job_url: 'https://linkedin.com/jobs/2',
-            job_description: 'vite'
+            job_description: 'vite frontend engineer remote',
+            time_posted: '2 days ago'
           }
         ])
       uut._searchQueries = PROFILE_STACK_SEARCH_QUERIES.slice(0, 2)
@@ -526,8 +637,9 @@ describe('#LinkedInJobSource', () => {
         {
           job_id: '2',
           job_title: 'Node dev',
-          job_description: 'api',
-          job_url: 'https://x'
+          job_description: 'api backend developer experience',
+          job_url: 'https://x',
+          time_posted: '1 day ago'
         }
       ])
       uut._searchQueries = ['one']
@@ -550,11 +662,35 @@ describe('#LinkedInJobSource', () => {
       sinon.assert.calledWithMatch(console.log, /rows before dedupe/)
     })
 
+    it('should skip older posts', async () => {
+      const uut = new LinkedInJobSource({ config: { apifyApiToken: 't' } })
+      sandbox.stub(uut, '_fetchForQuery').resolves([
+        {
+          job_id: '1',
+          job_title: 'Node dev',
+          job_description: 'backend developer experience',
+          time_posted: '2 months ago'
+        },
+        {
+          job_id: '2',
+          job_title: 'Node dev',
+          job_description: 'backend developer experience',
+          time_posted: '1 day ago'
+        }
+      ])
+      uut._searchQueries = ['one']
+
+      const rows = await uut.fetchVacancies()
+      assert.strictEqual(rows.length, 1)
+      assert.strictEqual(rows[0].externalId, '2')
+      sinon.assert.calledWithMatch(console.log, /older than/)
+    })
+
     it('should dedupe by job_url when job_id missing', async () => {
       const uut = new LinkedInJobSource({ config: { apifyApiToken: 't' } })
       sandbox.stub(uut, '_fetchForQuery').resolves([
-        { job_title: 'A', job_url: 'https://li/j/9' },
-        { job_title: 'B', job_url: 'https://li/j/9' }
+        { job_title: 'A', job_url: 'https://li/j/9', job_description: 'developer experience' },
+        { job_title: 'B', job_url: 'https://li/j/9', job_description: 'developer experience' }
       ])
       uut._searchQueries = ['q']
 

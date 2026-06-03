@@ -6,7 +6,10 @@ import { assert } from 'chai'
 import sinon from 'sinon'
 
 import wlogger from '../../../../src/adapters/wlogger.js'
-import LlmAdapter from '../../../../src/adapters/llm/index.js'
+import LlmAdapter, {
+  LLM_UNSUPPORTED_LANGUAGE_FLAG,
+  vacancyHasUnsupportedLanguage
+} from '../../../../src/adapters/llm/index.js'
 
 function openAiResponse (content, status = 200) {
   const body = JSON.stringify({
@@ -53,7 +56,57 @@ describe('#LlmAdapter', () => {
     })
   })
 
+  describe('vacancyHasUnsupportedLanguage()', () => {
+    it('should detect unsupported_language flag case-insensitively', () => {
+      assert.isTrue(
+        vacancyHasUnsupportedLanguage({ llmFlags: ['unsupported_language'] })
+      )
+      assert.isTrue(
+        vacancyHasUnsupportedLanguage({ llmFlags: ['Unsupported_Language'] })
+      )
+      assert.isFalse(vacancyHasUnsupportedLanguage({ llmFlags: ['remote'] }))
+      assert.isFalse(vacancyHasUnsupportedLanguage({}))
+      assert.isFalse(vacancyHasUnsupportedLanguage({ llmFlags: null }))
+    })
+
+    it('should export stable unsupported language flag name', () => {
+      assert.strictEqual(LLM_UNSUPPORTED_LANGUAGE_FLAG, 'unsupported_language')
+    })
+  })
+
   describe('score()', () => {
+    it('should zero score and set belowMinScore for unsupported_language flag', async () => {
+      sandbox.stub(globalThis, 'fetch').resolves(
+        openAiResponse(
+          JSON.stringify({
+            score: 0.9,
+            reasons: ['not english or spanish'],
+            flags: ['unsupported_language']
+          })
+        )
+      )
+
+      const uut = new LlmAdapter({
+        config: { llmApiUrl: 'http://llm.test/v1', minVacancyLlmScore: 0.5 }
+      })
+      const out = await uut.score({
+        title: 'Développeur',
+        company: 'C',
+        category: 'c',
+        locationType: 'remote',
+        experienceLevel: 'mid',
+        keywords: [],
+        skills: [],
+        summary: '',
+        content: 'Nous cherchons un développeur.'
+      })
+
+      assert.strictEqual(out.llmStatus, 'completed')
+      assert.strictEqual(out.llmScore, 0)
+      assert.isTrue(out.belowMinScore)
+      assert.deepEqual(out.llmFlags, ['unsupported_language'])
+    })
+
     it('should return completed result with clamped score and deduped reasons', async () => {
       const validJson = JSON.stringify({
         score: 1.5,

@@ -30,6 +30,12 @@ export const LINKEDIN_DEFAULT_POLL_INTERVAL_MS = 5000
 /** Max poll rounds after async start (~5 min at 5s). */
 export const LINKEDIN_DEFAULT_POLL_MAX_ATTEMPTS = 60
 
+/** Apify actor `posted_within` — scrape only recent listings. */
+export const LINKEDIN_DEFAULT_POSTED_WITHIN = 'Past Month'
+
+/** Drop ingested rows when `datePosted` is older than this many days. */
+export const LINKEDIN_MAX_POST_AGE_DAYS = 30
+
 /**
  * One search per core area in `vacancy-scoring-prompt.md` (Profile Context).
  */
@@ -126,14 +132,145 @@ export function inferLinkedInLocationType (text) {
 }
 
 /**
+ * @param {Date} now
+ * @param {number} amount
+ * @param {'minute'|'hour'|'day'|'week'|'month'} unit
+ * @returns {Date}
+ */
+export function subtractLinkedInTimeUnit (now, amount, unit) {
+  const d = new Date(now)
+  const n = Math.max(0, Number(amount) || 0)
+  switch (unit) {
+    case 'minute':
+      d.setMinutes(d.getMinutes() - n)
+      break
+    case 'hour':
+      d.setHours(d.getHours() - n)
+      break
+    case 'day':
+      d.setDate(d.getDate() - n)
+      break
+    case 'week':
+      d.setDate(d.getDate() - n * 7)
+      break
+    case 'month':
+      d.setMonth(d.getMonth() - n)
+      break
+    default:
+      break
+  }
+  return d
+}
+
+/**
+ * Parses LinkedIn relative posting strings (e.g. `"2 days ago"`, `"hace 1 semana"`).
+ *
  * @param {string|number|Date|undefined} value
+ * @param {Date} [now]
  * @returns {Date|undefined}
  */
-export function parseLinkedInDatePosted (value) {
+export function parseLinkedInRelativeTimePosted (value, now = new Date()) {
+  const s = String(value || '').trim().toLowerCase()
+  if (!s) return undefined
+
+  if (/^(just now|today|ahora|hoy|recientemente|reposted)$/i.test(s)) {
+    return new Date(now)
+  }
+
+  let m = s.match(/^(\d+)\s+(minute|hour|day|week|month)s?\s+ago$/)
+  if (m) return subtractLinkedInTimeUnit(now, parseInt(m[1], 10), m[2])
+
+  m = s.match(/^an?\s+(minute|hour|day|week|month)\s+ago$/)
+  if (m) return subtractLinkedInTimeUnit(now, 1, m[1])
+
+  m = s.match(
+    /^hace\s+(\d+)\s+(minuto|minutos|hora|horas|d[ií]a|d[ií]as|semana|semanas|mes|meses)$/
+  )
+  if (m) {
+    const unit = m[2].startsWith('minut')
+      ? 'minute'
+      : m[2].startsWith('hor')
+        ? 'hour'
+        : m[2].startsWith('d')
+          ? 'day'
+          : m[2].startsWith('seman')
+            ? 'week'
+            : 'month'
+    return subtractLinkedInTimeUnit(now, parseInt(m[1], 10), unit)
+  }
+
+  m = s.match(/^hace\s+(?:un|una)\s+(minuto|hora|d[ií]a|semana|mes)$/)
+  if (m) {
+    const unit = m[1].startsWith('minut')
+      ? 'minute'
+      : m[1].startsWith('hor')
+        ? 'hour'
+        : m[1].startsWith('d')
+          ? 'day'
+          : m[1].startsWith('seman')
+            ? 'week'
+            : 'month'
+    return subtractLinkedInTimeUnit(now, 1, unit)
+  }
+
+  return undefined
+}
+
+/**
+ * @param {string|number|Date|undefined} value
+ * @param {Date} [now]
+ * @returns {Date|undefined}
+ */
+export function parseLinkedInDatePosted (value, now = new Date()) {
   if (value === undefined || value === null || value === '') return undefined
   if (value instanceof Date && !Number.isNaN(value.getTime())) return value
+
+  const relative = parseLinkedInRelativeTimePosted(value, now)
+  if (relative) return relative
+
   const d = new Date(value)
   return Number.isNaN(d.getTime()) ? undefined : d
+}
+
+/**
+ * @param {object} raw
+ * @returns {string}
+ */
+export function buildLinkedInIngestHaystack (raw = {}) {
+  return [
+    pickLinkedInField(raw, ['job_title', 'jobTitle', 'Job Title', 'title']),
+    buildLinkedInBodyText(raw),
+    pickLinkedInField(raw, ['job_function', 'jobFunction', 'Job Function'])
+  ]
+    .filter((p) => p != null && String(p).length)
+    .map((p) => String(p))
+    .join('\n')
+}
+
+/**
+ * @param {object} raw
+ * @param {number} [maxAgeDays]
+ * @param {Date} [now]
+ * @returns {boolean}
+ */
+export function isLinkedInPostTooOld (
+  raw,
+  maxAgeDays = LINKEDIN_MAX_POST_AGE_DAYS,
+  now = new Date()
+) {
+  const timePosted = pickLinkedInField(raw, [
+    'time_posted',
+    'timePosted',
+    'Time Posted',
+    'postedDate',
+    'datePosted'
+  ])
+  const posted = parseLinkedInDatePosted(timePosted, now)
+  if (!posted) return false
+
+  const cutoff = new Date(now)
+  cutoff.setDate(cutoff.getDate() - maxAgeDays)
+  return posted < cutoff
 }
 
 /**
@@ -315,14 +452,7 @@ export function normalizeLinkedInJob (raw, sourceSlug, ingestionVersion) {
  */
 export function matchesIgnoreStackForIngest (raw) {
   if (!raw || typeof raw !== 'object') return false
-  const haystack = [
-    pickLinkedInField(raw, ['job_title', 'jobTitle', 'Job Title', 'title']),
-    buildLinkedInBodyText(raw),
-    pickLinkedInField(raw, ['job_function', 'jobFunction', 'Job Function'])
-  ]
-    .filter((p) => p != null && String(p).length)
-    .map((p) => String(p))
-    .join('\n')
+  const haystack = buildLinkedInIngestHaystack(raw)
   if (!haystack.length) return false
   return IGNORE_STACK_REGEXES.some((re) => re.test(haystack))
 }
@@ -356,6 +486,8 @@ export default class LinkedInJobSource {
     this._maxItemsPerQuery = LINKEDIN_DEFAULT_MAX_ITEMS_PER_QUERY
     this._pollIntervalMs = LINKEDIN_DEFAULT_POLL_INTERVAL_MS
     this._pollMaxAttempts = LINKEDIN_DEFAULT_POLL_MAX_ATTEMPTS
+    this._postedWithin = LINKEDIN_DEFAULT_POSTED_WITHIN
+    this._maxPostAgeDays = LINKEDIN_MAX_POST_AGE_DAYS
     this._searchQueries = PROFILE_STACK_SEARCH_QUERIES
     this._useApifyProxy = true
   }
@@ -380,7 +512,8 @@ export default class LinkedInJobSource {
       job_title: String(searchKeywords || '').trim(),
       location: this._location,
       jobs_entries: this._maxItemsPerQuery,
-      start_jobs: 0
+      start_jobs: 0,
+      posted_within: this._postedWithin
     }
     if (this._useApifyProxy) {
       input.proxyConfiguration = { useApifyProxy: true }
@@ -574,19 +707,29 @@ export default class LinkedInJobSource {
     }
 
     const deduped = [...byId.values()]
-    const kept = deduped.filter((raw) => !matchesIgnoreStackForIngest(raw))
-    const ignoredStackCount = deduped.length - kept.length
+    const afterStack = deduped.filter((raw) => !matchesIgnoreStackForIngest(raw))
+    const ignoredStackCount = deduped.length - afterStack.length
+
+    const kept = afterStack.filter(
+      (raw) => !isLinkedInPostTooOld(raw, this._maxPostAgeDays)
+    )
+    const skippedOldCount = afterStack.length - kept.length
+
     const normalized = kept.map(this.normalize)
 
     let logMsg =
       `LinkedInJobSource.fetchVacancies: ${normalized.length} unique vacancies` +
       ` (${this._searchQueries.length} Apify runs, jobs_entries=${this._maxItemsPerQuery},` +
-      ` location=${this._location})`
+      ` location=${this._location}, posted_within=${this._postedWithin},` +
+      ` max_age_days=${this._maxPostAgeDays})`
     if (rawRowCount !== deduped.length) {
       logMsg += ` (${rawRowCount} rows before dedupe)`
     }
     if (ignoredStackCount > 0) {
       logMsg += `; skipped ${ignoredStackCount} ignored-stack match(es)`
+    }
+    if (skippedOldCount > 0) {
+      logMsg += `; skipped ${skippedOldCount} older than ${this._maxPostAgeDays} day(s)`
     }
     console.log(logMsg)
     return normalized
