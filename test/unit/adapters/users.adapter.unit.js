@@ -28,6 +28,15 @@ describe('#User-Adapter', () => {
       useNewUrlParser: true
     })
 
+    for (const indexName of ['walletAddress_1', 'walletIndex_1']) {
+      try {
+        await User.collection.dropIndex(indexName)
+      } catch (_err) {
+        // Stale indexes from older schemas; ignore if missing.
+      }
+    }
+    await User.deleteMany({ email: 'test983@test.com' })
+
     testuser = new User({
       email: 'test983@test.com',
       name: 'test983',

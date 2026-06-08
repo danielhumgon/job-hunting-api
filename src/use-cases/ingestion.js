@@ -5,6 +5,32 @@
 import VacancyEntity from '../entities/vacancy.js'
 import { vacancyHasUnsupportedLanguage } from '../adapters/llm/index.js'
 
+/** Drop ingested rows when `datePosted` is older than this many days. */
+export const INGESTION_MAX_POST_AGE_DAYS = 30
+
+/**
+ * @param {object} row — normalized vacancy row
+ * @param {number} [maxAgeDays]
+ * @param {Date} [now]
+ * @returns {boolean}
+ */
+export function isVacancyTooOldForIngestion (
+  row,
+  maxAgeDays = INGESTION_MAX_POST_AGE_DAYS,
+  now = new Date()
+) {
+  const datePosted = row?.datePosted
+  if (datePosted == null) return false
+
+  const posted =
+    datePosted instanceof Date ? datePosted : new Date(datePosted)
+  if (Number.isNaN(posted.getTime())) return false
+
+  const cutoff = new Date(now)
+  cutoff.setDate(cutoff.getDate() - maxAgeDays)
+  return posted < cutoff
+}
+
 function dedupeBySourceAndExternalId (rows) {
   if (!Array.isArray(rows)) return []
   const map = new Map()
@@ -43,6 +69,7 @@ class IngestionUseCases {
       const rows = dedupeBySourceAndExternalId(fetched)
 
       let skippedInvalid = 0
+      let skippedTooOld = 0
       let skippedUnsupportedLanguage = 0
       let llmFailed = 0
       let persisted = 0
@@ -57,6 +84,18 @@ class IngestionUseCases {
         } catch (err) {
           skippedInvalid += 1
           console.log('ingestion: skipped invalid vacancy:', err.message)
+          continue
+        }
+
+        if (isVacancyTooOldForIngestion(row)) {
+          skippedTooOld += 1
+          console.log(
+            'ingestion: skipped vacancy older than',
+            INGESTION_MAX_POST_AGE_DAYS,
+            'day(s):',
+            row.source,
+            row.externalId
+          )
           continue
         }
 
@@ -101,6 +140,7 @@ class IngestionUseCases {
           fetchedRows: Array.isArray(fetched) ? fetched.length : 0,
           dedupedRows: rows.length,
           skippedInvalid,
+          skippedTooOld,
           skippedUnsupportedLanguage,
           llmFailed,
           persisted,

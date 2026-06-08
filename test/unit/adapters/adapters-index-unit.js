@@ -38,6 +38,33 @@ describe('#adapters', () => {
 
       assert.equal(result, true)
     })
+    it('should refresh dynamic LLM prompt when Mongo is enabled', async () => {
+      uut.config.getJwtAtStartup = false
+      uut.config.env = 'test'
+      uut.config.noMongo = false
+      sandbox.stub(uut.jobSources, 'start').resolves()
+      const reloadSpy = sandbox.spy(uut.llm, 'reloadSystemPrompt')
+
+      const result = await uut.start()
+
+      assert.equal(result, true)
+      assert.isTrue(reloadSpy.calledOnce)
+    })
+
+    it('should continue startup when dynamic prompt reload fails', async () => {
+      uut.config.getJwtAtStartup = false
+      uut.config.env = 'test'
+      uut.config.noMongo = false
+      sandbox.stub(uut.jobSources, 'start').resolves()
+      sandbox
+        .stub(uut.llm, 'reloadSystemPrompt')
+        .throws(new Error('reload failed'))
+
+      const result = await uut.start()
+
+      assert.equal(result, true)
+    })
+
     it('should not start ipfs on test enviroment', async () => {
       // Mock dependencies
       uut.config.getJwtAtStartup = true

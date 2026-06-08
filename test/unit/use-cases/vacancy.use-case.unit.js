@@ -9,7 +9,8 @@ import sinon from 'sinon'
 import VacancyLib, {
   parseVacancyFilterOptions,
   VACANCIES_FILTER_MAX_PER_PAGE,
-  VACANCIES_LIST_PAGE_SIZE
+  VACANCIES_LIST_PAGE_SIZE,
+  VACANCIES_NOT_REJECTED_FILTER
 } from '../../../src/use-cases/vacancy.js'
 import Vacancy from '../../../src/adapters/localdb/models/vacancy.js'
 
@@ -55,7 +56,7 @@ describe('#VacancyLib', () => {
 
       const out = await uut.listVacancies()
 
-      assert.deepStrictEqual(findStub.firstCall.args[0], {})
+      assert.deepStrictEqual(findStub.firstCall.args[0], VACANCIES_NOT_REJECTED_FILTER)
       assert.strictEqual(out.pagination.page, 1)
       assert.strictEqual(out.pagination.limit, 10)
       assert.strictEqual(out.pagination.pages, 1)
@@ -149,7 +150,8 @@ describe('#VacancyLib', () => {
 
       assert.deepStrictEqual(findStub.firstCall.args[0], {
         llmScore: { $gte: 1 },
-        source: 'x'
+        source: 'x',
+        rejected: { $ne: true }
       })
       assert.strictEqual(out.pagination.page, 2)
       assert.strictEqual(out.pagination.limit, 2)
@@ -189,7 +191,10 @@ describe('#VacancyLib', () => {
       }
       const findStub = sandbox.stub(Vacancy, 'find').returns(chain)
       const out = await uut.listAppliedVacancies()
-      assert.deepStrictEqual(findStub.firstCall.args[0], { applied: true })
+      assert.deepStrictEqual(findStub.firstCall.args[0], {
+        applied: true,
+        rejected: { $ne: true }
+      })
       assert.isTrue(chain.sort.calledOnceWith({ appliedAt: -1 }))
       assert.deepStrictEqual(out.data, [{ _id: 'a', applied: true }])
     })
@@ -268,6 +273,82 @@ describe('#VacancyLib', () => {
     })
   })
 
+  describe('markVacancyRejected', () => {
+    it('should set rejected and rejectedAt', async () => {
+      const id = '507f191e810c19729de860ea'
+      const updated = {
+        _id: id,
+        rejected: true,
+        title: 't'
+      }
+      sandbox.stub(mongoose.Types.ObjectId, 'isValid').returns(true)
+      const leanStub = sandbox.stub().resolves(updated)
+      const updateStub = sandbox.stub(Vacancy, 'findByIdAndUpdate').returns({
+        lean: leanStub
+      })
+
+      const out = await uut.markVacancyRejected(id)
+
+      assert.deepStrictEqual(out, updated)
+      assert.strictEqual(updateStub.firstCall.args[0], id)
+      const setPatch = updateStub.firstCall.args[1].$set
+      assert.strictEqual(setPatch.rejected, true)
+      assert.instanceOf(setPatch.rejectedAt, Date)
+      assert.isUndefined(setPatch.rejectReason)
+    })
+
+    it('should set rejectReason when provided', async () => {
+      const id = '507f191e810c19729de860ea'
+      sandbox.stub(mongoose.Types.ObjectId, 'isValid').returns(true)
+      const updateStub = sandbox.stub(Vacancy, 'findByIdAndUpdate').returns({
+        lean: sandbox.stub().resolves({ _id: id, rejectReason: 'Not remote' })
+      })
+
+      await uut.markVacancyRejected(id, '  Not remote  ')
+
+      assert.strictEqual(
+        updateStub.firstCall.args[1].$set.rejectReason,
+        'Not remote'
+      )
+    })
+
+    it('should throw 404 for invalid id', async () => {
+      try {
+        await uut.markVacancyRejected('bad')
+        assert.fail('expected throw')
+      } catch (err) {
+        assert.strictEqual(err.status, 404)
+      }
+    })
+
+    it('should throw 404 when not found', async () => {
+      sandbox.stub(mongoose.Types.ObjectId, 'isValid').returns(true)
+      sandbox.stub(Vacancy, 'findByIdAndUpdate').returns({
+        lean: sandbox.stub().resolves(null)
+      })
+      try {
+        await uut.markVacancyRejected('507f191e810c19729de860ea')
+        assert.fail('expected throw')
+      } catch (err) {
+        assert.strictEqual(err.status, 404)
+      }
+    })
+
+    it('should propagate non-404 errors from findByIdAndUpdate', async () => {
+      sandbox.stub(mongoose.Types.ObjectId, 'isValid').returns(true)
+      sandbox.stub(Vacancy, 'findByIdAndUpdate').returns({
+        lean: sandbox.stub().rejects(new Error('cast failed'))
+      })
+      try {
+        await uut.markVacancyRejected('507f191e810c19729de860ea')
+        assert.fail('expected throw')
+      } catch (err) {
+        assert.include(err.message, 'cast failed')
+        assert.isUndefined(err.status)
+      }
+    })
+  })
+
   describe('getVacancy', () => {
     it('should throw 404 for invalid ids', async () => {
       sandbox.stub(mongoose.Types.ObjectId, 'isValid').returns(false)
@@ -285,6 +366,20 @@ describe('#VacancyLib', () => {
       sandbox.stub(mongoose.Types.ObjectId, 'isValid').returns(true)
       sandbox.stub(Vacancy, 'findById').returns({
         lean: sandbox.stub().resolves(null)
+      })
+
+      try {
+        await uut.getVacancy({ id: '507f191e810c19729de860ea' })
+        assert.fail('expected throw')
+      } catch (err) {
+        assert.strictEqual(err.status, 404)
+      }
+    })
+
+    it('should throw 404 when vacancy is rejected', async () => {
+      sandbox.stub(mongoose.Types.ObjectId, 'isValid').returns(true)
+      sandbox.stub(Vacancy, 'findById').returns({
+        lean: sandbox.stub().resolves({ title: 't', rejected: true })
       })
 
       try {

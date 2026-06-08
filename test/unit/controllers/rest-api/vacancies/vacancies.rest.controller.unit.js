@@ -13,6 +13,7 @@ function makeUut (sandbox, overrides = {}) {
       listVacancies: sandbox.stub().resolves({ data: [], pagination: {} }),
       listAppliedVacancies: sandbox.stub().resolves({ data: [] }),
       markVacancyApplied: sandbox.stub().resolves({ applied: true }),
+      markVacancyRejected: sandbox.stub().resolves({ rejected: true }),
       filterVacancies: sandbox.stub().resolves({ data: [], pagination: {} }),
       getVacancy: sandbox.stub().resolves(null),
       updateVacancy: sandbox.stub().resolves({}),
@@ -195,6 +196,92 @@ describe('#Vacancies-REST-controller', () => {
       })
       const ctx = { request: { body: { id: '507f191e810c19729de860ea' } } }
       await uut.postApplyVacancy(ctx)
+      assert.strictEqual(ctx.status, 404)
+    })
+  })
+
+  describe('postRejectVacancy()', () => {
+    it('should require id in body', async () => {
+      const { uut, useCases } = makeUut(sandbox)
+      const ctx = { request: { body: {} } }
+      await uut.postRejectVacancy(ctx)
+      assert.strictEqual(ctx.status, 400)
+      assert.strictEqual(ctx.body, 'Vacancy id is required')
+      assert.isFalse(useCases.vacancy.markVacancyRejected.called)
+    })
+
+    it('should return updated doc', async () => {
+      const updated = { _id: '507f191e810c19729de860ea', rejected: true }
+      const markVacancyRejected = sandbox.stub().resolves(updated)
+      const { uut } = makeUut(sandbox, {
+        vacancy: { markVacancyRejected }
+      })
+      const ctx = { request: { body: { id: '507f191e810c19729de860ea' } } }
+      await uut.postRejectVacancy(ctx)
+      assert.strictEqual(ctx.status, 200)
+      assert.deepStrictEqual(ctx.body, updated)
+      assert(markVacancyRejected.calledOnceWith('507f191e810c19729de860ea', undefined))
+    })
+
+    it('should pass rejectReason from nested vacancy object', async () => {
+      const markVacancyRejected = sandbox.stub().resolves({ rejected: true })
+      const { uut } = makeUut(sandbox, {
+        vacancy: { markVacancyRejected }
+      })
+      const ctx = {
+        request: {
+          body: {
+            vacancy: {
+              id: '507f191e810c19729de860ea',
+              rejectReason: 'Wrong location'
+            }
+          }
+        }
+      }
+      await uut.postRejectVacancy(ctx)
+      assert(
+        markVacancyRejected.calledOnceWith(
+          '507f191e810c19729de860ea',
+          'Wrong location'
+        )
+      )
+    })
+
+    it('should pass rejectReason from body', async () => {
+      const updated = {
+        _id: '507f191e810c19729de860ea',
+        rejected: true,
+        rejectReason: 'Wrong stack'
+      }
+      const markVacancyRejected = sandbox.stub().resolves(updated)
+      const { uut } = makeUut(sandbox, {
+        vacancy: { markVacancyRejected }
+      })
+      const ctx = {
+        request: {
+          body: {
+            id: '507f191e810c19729de860ea',
+            rejectReason: 'Wrong stack'
+          }
+        }
+      }
+      await uut.postRejectVacancy(ctx)
+      assert(
+        markVacancyRejected.calledOnceWith(
+          '507f191e810c19729de860ea',
+          'Wrong stack'
+        )
+      )
+    })
+
+    it('should surface 404 from use case', async () => {
+      const err = new Error('Vacancy not found')
+      err.status = 404
+      const { uut } = makeUut(sandbox, {
+        vacancy: { markVacancyRejected: sandbox.stub().rejects(err) }
+      })
+      const ctx = { request: { body: { id: '507f191e810c19729de860ea' } } }
+      await uut.postRejectVacancy(ctx)
       assert.strictEqual(ctx.status, 404)
     })
   })

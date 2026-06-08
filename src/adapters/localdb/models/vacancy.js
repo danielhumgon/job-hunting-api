@@ -35,7 +35,10 @@ const VacancySchema = new mongoose.Schema(
 
     belowMinScore: { type: Boolean, default: false },
     applied: { type: Boolean, default: false },
-    appliedAt: { type: Date }
+    appliedAt: { type: Date },
+    rejected: { type: Boolean, default: false },
+    rejectedAt: { type: Date },
+    rejectReason: { type: String }
   },
   {
     timestamps: true
@@ -48,6 +51,7 @@ VacancySchema.index({ locationType: 1, datePosted: -1 })
 VacancySchema.index({ llmScore: -1, datePosted: -1 })
 VacancySchema.index({ llmStatus: 1 })
 VacancySchema.index({ applied: 1, appliedAt: -1 })
+VacancySchema.index({ rejected: 1, rejectedAt: -1 })
 VacancySchema.index(
   { title: 'text', summary: 'text', keywords: 'text' },
   { weights: { title: 5, summary: 2, keywords: 1 } }

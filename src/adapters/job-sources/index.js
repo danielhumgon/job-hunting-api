@@ -26,7 +26,6 @@ class JobSources {
 
       // NOTE: Reviewing this source .
       // new LeverJobSource({ config: cfg })
-
     ]
 
     this.sourcesSlug = this._buildSourcesSlug()
@@ -84,8 +83,16 @@ class JobSources {
         perSource.push({ source: name, count, ok: true })
       } catch (err) {
         sourcesFailed += 1
-        console.error(`JobSources.ingestVacancies: source "${name}" failed:`, err.message)
-        perSource.push({ source: name, count: 0, ok: false, error: err.message })
+        console.error(
+          `JobSources.ingestVacancies: source "${name}" failed:`,
+          err.message
+        )
+        perSource.push({
+          source: name,
+          count: 0,
+          ok: false,
+          error: err.message
+        })
       }
     }
 

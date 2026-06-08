@@ -3,6 +3,9 @@
 */
 
 import { assert } from 'chai'
+import { existsSync, renameSync } from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
 import sinon from 'sinon'
 
 import wlogger from '../../../../src/adapters/wlogger.js'
@@ -10,6 +13,13 @@ import LlmAdapter, {
   LLM_UNSUPPORTED_LANGUAGE_FLAG,
   vacancyHasUnsupportedLanguage
 } from '../../../../src/adapters/llm/index.js'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const DYNAMIC_PROMPT = path.join(
+  __dirname,
+  '../../../../src/adapters/llm/vacancy-scoring-prompt-dinamic.md'
+)
+const DYNAMIC_PROMPT_BAK = `${DYNAMIC_PROMPT}.bak`
 
 function openAiResponse (content, status = 200) {
   const body = JSON.stringify({
@@ -47,6 +57,29 @@ describe('#LlmAdapter', () => {
         config: { llmApiUrl: 'http://127.0.0.1:11434/v1/' }
       })
       assert.strictEqual(uut.baseUrl, 'http://127.0.0.1:11434/v1')
+    })
+
+    it('should prefer dynamic prompt file when present', () => {
+      const uut = new LlmAdapter({ config: {} })
+      assert.include(uut._promptPath, 'vacancy-scoring-prompt-dinamic.md')
+    })
+
+    it('should use base prompt when dynamic file is absent', () => {
+      const hadDynamic = existsSync(DYNAMIC_PROMPT)
+      if (hadDynamic) renameSync(DYNAMIC_PROMPT, DYNAMIC_PROMPT_BAK)
+      try {
+        const uut = new LlmAdapter({ config: {} })
+        assert.include(uut._promptPath, 'vacancy-scoring-prompt.md')
+        assert.notInclude(uut._promptPath, 'dinamic')
+      } finally {
+        if (hadDynamic) renameSync(DYNAMIC_PROMPT_BAK, DYNAMIC_PROMPT)
+      }
+    })
+
+    it('should reload system prompt from disk', () => {
+      const uut = new LlmAdapter({ config: {} })
+      uut.reloadSystemPrompt()
+      assert.isAbove(uut._systemPrompt.length, 20)
     })
 
     it('should apply defaults when config omits LLM fields', () => {

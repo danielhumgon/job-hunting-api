@@ -9,15 +9,47 @@ import axios from 'axios'
 // Local libraries
 import config from '../../config/index.js'
 import JsonFiles from '../../src/adapters/json-files.js'
+import User from '../../src/adapters/localdb/models/users.js'
 
 // Hack to get __dirname back.
 // https://blog.logrocket.com/alternatives-dirname-node-js-es-modules/
 import * as url from 'url'
+import path from 'path'
 
 const jsonFiles = new JsonFiles()
 
 const LOCALHOST = `http://localhost:${config.port}`
 const __dirname = url.fileURLToPath(new URL('.', import.meta.url))
+
+function systemUserFilePath () {
+  return path.join(__dirname, '../../config', `system-user-${config.env}.json`)
+}
+
+const STALE_USER_INDEXES = ['walletAddress_1', 'walletIndex_1']
+
+async function ensureMongoose () {
+  if (mongoose.connection.readyState === 0) {
+    mongoose.Promise = global.Promise
+    mongoose.set('useCreateIndex', true)
+    await mongoose.connect(config.database, {
+      useUnifiedTopology: true,
+      useNewUrlParser: true
+    })
+  }
+}
+
+/** Drop legacy unique indexes that break multi-user test data (null dup keys). */
+async function dropStaleUserIndexes () {
+  if (config.noMongo) return
+  await ensureMongoose()
+  for (const name of STALE_USER_INDEXES) {
+    try {
+      await User.collection.dropIndex(name)
+    } catch (_err) {
+      // Index may not exist on a fresh database.
+    }
+  }
+}
 
 // Remove all collections from the DB.
 async function cleanDb () {
@@ -99,10 +131,7 @@ async function loginTestUser () {
 
 async function loginAdminUser () {
   try {
-    const FILENAME = `${__dirname.toString()}../../config/system-user-${config.env}.json`
-    // console.log('FILENAME: ', FILENAME)
-
-    const adminUserData = await jsonFiles.readJSON(FILENAME)
+    const adminUserData = await jsonFiles.readJSON(systemUserFilePath())
     // console.log(`adminUserData: ${JSON.stringify(adminUserData, null, 2)}`)
 
     const options = {
@@ -140,9 +169,7 @@ async function getAdminJWT () {
     // process.env.KOA_ENV = process.env.KOA_ENV || 'dev'
     // console.log(`env: ${process.env.KOA_ENV}`)
 
-    const FILENAME = `${__dirname.toString()}../../config/system-user-${config.env}.json`
-    // console.log('FILENAME: ', FILENAME)
-    const adminUserData = await jsonFiles.readJSON(FILENAME)
+    const adminUserData = await jsonFiles.readJSON(systemUserFilePath())
     // console.log(`adminUserData: ${JSON.stringify(adminUserData, null, 2)}`)
 
     return adminUserData.token
@@ -151,16 +178,19 @@ async function getAdminJWT () {
     throw err
   }
 }
+async function adminAuthHeader () {
+  const { token } = await loginAdminUser()
+  return { Authorization: `Bearer ${token}` }
+}
+
 // Fetches all users from the database.
 async function getAllUsers () {
   try {
-    const adminJWT = await getAdminJWT()
+    const headers = await adminAuthHeader()
     const options = {
       method: 'GET',
       url: `${LOCALHOST}/users`,
-      headers: {
-        Authorization: `Bearer ${adminJWT}`
-      }
+      headers
     }
     const result = await axios(options)
     return result.data.users
@@ -173,8 +203,9 @@ async function getAllUsers () {
 // Deletes all users from the database.
 async function deleteAllUsers () {
   try {
+    await dropStaleUserIndexes()
     const allUsers = await getAllUsers()
-    const adminJWT = await getAdminJWT()
+    const headers = await adminAuthHeader()
     for (let i = 0; i < allUsers.length; i++) {
       const user = allUsers[i]
       // Skip the admin user.
@@ -184,9 +215,7 @@ async function deleteAllUsers () {
       const options = {
         method: 'DELETE',
         url: `${LOCALHOST}/users/${user._id}`,
-        headers: {
-          Authorization: `Bearer ${adminJWT}`
-        }
+        headers
       }
       await axios(options)
     }
@@ -202,5 +231,6 @@ export default {
   loginAdminUser,
   getAdminJWT,
   deleteAllUsers,
-  getAllUsers
+  getAllUsers,
+  dropStaleUserIndexes
 }
