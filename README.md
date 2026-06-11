@@ -53,7 +53,7 @@ New features (additional sources, API changes, scoring behavior) should be **doc
 | Capability | Description |
 |------------|-------------|
 | **Ingestion** | Timer-driven pipeline: fetch → validate → LLM score → upsert into MongoDB. |
-| **LLM scoring** | OpenAI-compatible chat API; prompt in `src/adapters/llm/vacancy-scoring-prompt.md`; retries and validation via `zod`. |
+| **LLM scoring** | OpenAI-compatible chat API; base prompt in `src/adapters/llm/vacancy-scoring-prompt.md`, runtime prompt in `vacancy-scoring-prompt-dinamic.md` (built by [`util/promptInitializer.js`](./util/promptInitializer.js)); retries and validation via `zod`. |
 | **REST** | `GET /vacancies/:page` (paginated list) and `GET /vacancies/:id` when Mongo is enabled. |
 | **Boilerplate** | Users, JWT auth, usage stats, IPFS/Helia integration, JSON-RPC, and existing `/api/v1/*` routes from upstream (see upstream README patterns). |
 
@@ -111,7 +111,8 @@ See **[production/docker/README.md](./production/docker/README.md)** for the thr
 
 | Command | Purpose |
 |---------|---------|
-| `npm start` | Run the server |
+| `npm start` | Build the dynamic LLM prompt, then run the server |
+| `node util/promptInitializer.js` | Regenerate `vacancy-scoring-prompt-dinamic.md` without starting the API |
 | `npm test` | Unit tests (`test:unit`) |
 | `npm run test:unit` | Unit tests with coverage gates |
 | `npm run test:all` | Unit + selected e2e |
@@ -125,6 +126,36 @@ See **[production/docker/README.md](./production/docker/README.md)** for the thr
 - Logs include **metrics** for each tick (counts per source, LLM failures, persistence stats).  
 - **Vacantes Digitales** also prints a line such as `VacantesDigitales.fetchVacancies: N unique vacancies` when that source finishes its `/api/search` batch (see multi-source section above).  
 - **X API** prints a line such as `XApiJobSource.fetchVacancies: N unique tweets` when recent search completes (skipped when `X_API_BEARER_TOKEN` is unset).
+
+### Dynamic scoring prompt (`promptInitializer`)
+
+[`util/promptInitializer.js`](./util/promptInitializer.js) keeps the LLM system prompt aligned with **recent manual dismissals**. It reads the base template [`src/adapters/llm/vacancy-scoring-prompt.md`](./src/adapters/llm/vacancy-scoring-prompt.md), injects up to **10** latest `rejectReason` values from MongoDB, and writes [`src/adapters/llm/vacancy-scoring-prompt-dinamic.md`](./src/adapters/llm/vacancy-scoring-prompt-dinamic.md). The LLM adapter prefers the dynamic file when it exists ([`src/adapters/llm/index.js`](./src/adapters/llm/index.js)).
+
+**When it runs**
+
+1. **`npm start`** — runs `node util/promptInitializer.js` before `index.js` (see [`package.json`](./package.json)).
+2. **API startup** — when Mongo is enabled, `Adapters.start()` calls `initializeDynamicVacancyPrompt()` again and reloads the in-memory prompt via `llm.reloadSystemPrompt()` ([`src/adapters/index.js`](./src/adapters/index.js)).
+
+**Manual run** (same DB and `.env` as the server):
+
+```bash
+node util/promptInitializer.js
+```
+
+Exit code is `0` on success, `1` if the script could not produce a usable output file.
+
+**Where rejection reasons come from**
+
+Dismissals via `POST /vacancies/reject` with an optional `rejectReason` are stored on the vacancy (`rejected`, `rejectedAt`, `rejectReason`). The script queries vacancies with `rejected: true` and a non-empty `rejectReason`, sorted by `rejectedAt` / `updatedAt` descending, and formats them as markdown bullets under **Learned Rejection Patterns** (placeholder `{{DYNAMIC_REJECT_REASONS}}` in the base prompt).
+
+**Behavior and safety**
+
+- **Never throws** from `initializeDynamicVacancyPrompt()` — DB errors are logged; the output file is still written.
+- If Mongo is unavailable, `config.noMongo` is set, or there are no reasons, the placeholder is filled with `_No recent manual rejection reasons on record._`
+- If the base file cannot be read, a minimal JSON-only fallback prompt is written so ingestion can continue.
+- **Edit scoring rules in** `vacancy-scoring-prompt.md` only; do not hand-edit `vacancy-scoring-prompt-dinamic.md` (it is regenerated).
+
+Unit tests: [`test/unit/util/promptInitializer.unit.js`](./test/unit/util/promptInitializer.unit.js).
 
 ### Vacancies API (examples)
 

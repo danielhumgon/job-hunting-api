@@ -22,6 +22,7 @@ class VacanciesRESTControllerLib {
     this.listVacancies = this.listVacancies.bind(this)
     this.listAppliedVacancies = this.listAppliedVacancies.bind(this)
     this.postApplyVacancy = this.postApplyVacancy.bind(this)
+    this.postRejectVacancy = this.postRejectVacancy.bind(this)
     this.getVacancy = this.getVacancy.bind(this)
     this.updateVacancy = this.updateVacancy.bind(this)
     this.deleteVacancy = this.deleteVacancy.bind(this)
@@ -54,6 +55,22 @@ class VacanciesRESTControllerLib {
       String(nested.id).trim() !== ''
     ) {
       return String(nested.id).trim()
+    }
+    return ''
+  }
+
+  rejectReasonFromBody (ctx) {
+    const body = ctx.request.body || {}
+    if (body.rejectReason !== undefined && body.rejectReason !== null) {
+      return String(body.rejectReason).trim()
+    }
+    const nested = body.vacancy
+    if (
+      nested &&
+      nested.rejectReason !== undefined &&
+      nested.rejectReason !== null
+    ) {
+      return String(nested.rejectReason).trim()
     }
     return ''
   }
@@ -138,6 +155,49 @@ class VacanciesRESTControllerLib {
         return
       }
       const updated = await this.useCases.vacancy.markVacancyApplied(id)
+      ctx.status = 200
+      ctx.body = updated
+    } catch (err) {
+      this.handleError(ctx, err)
+    }
+  }
+
+  /**
+   * @api {post} /vacancies/reject Mark a vacancy as rejected
+   * @apiName PostRejectVacancy
+   * @apiGroup REST Vacancies
+   *
+   * @apiParam {String} id Mongo ObjectId of the vacancy (JSON body)
+   * @apiParam {String} [rejectReason] Optional reason for rejection
+   * @apiParam {Object} [vacancy] Alternative: `{ "vacancy": { "id": "...", "rejectReason": "..." } }`
+   *
+   * @apiExample Example usage:
+   * curl -H "Content-Type: application/json" -X POST \
+   *   -d '{ "id": "507f1f77bcf86cd799439011", "rejectReason": "Not remote" }' \
+   *   http://localhost:5020/vacancies/reject
+   *
+   * @apiSuccess {Object} document Updated vacancy (includes rejected=true, rejectedAt, and rejectReason when provided)
+   *
+   * @apiError BadRequest Missing id in body
+   * @apiError NotFound Invalid or unknown vacancy id
+   *
+   * @apiErrorExample {text} Bad-Request:
+   *     HTTP/1.1 400 Bad Request
+   *     Vacancy id is required
+   */
+  async postRejectVacancy (ctx) {
+    try {
+      const id = this.applyVacancyIdFromBody(ctx)
+      if (!id) {
+        ctx.status = 400
+        ctx.body = 'Vacancy id is required'
+        return
+      }
+      const rejectReason = this.rejectReasonFromBody(ctx)
+      const updated = await this.useCases.vacancy.markVacancyRejected(
+        id,
+        rejectReason || undefined
+      )
       ctx.status = 200
       ctx.body = updated
     } catch (err) {

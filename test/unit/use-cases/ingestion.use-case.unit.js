@@ -5,7 +5,10 @@
 import { assert } from 'chai'
 import sinon from 'sinon'
 
-import IngestionUseCases from '../../../src/use-cases/ingestion.js'
+import IngestionUseCases, {
+  INGESTION_MAX_POST_AGE_DAYS,
+  isVacancyTooOldForIngestion
+} from '../../../src/use-cases/ingestion.js'
 
 describe('#IngestionUseCases', () => {
   let sandbox
@@ -19,6 +22,33 @@ describe('#IngestionUseCases', () => {
   describe('constructor', () => {
     it('should throw when adapters is missing', () => {
       assert.throws(() => new IngestionUseCases({}), /adapters must be passed/)
+    })
+  })
+
+  describe('isVacancyTooOldForIngestion()', () => {
+    const now = new Date('2026-06-06T12:00:00.000Z')
+
+    it('should return false when datePosted is within max age', () => {
+      const recent = new Date(now)
+      recent.setDate(recent.getDate() - 10)
+      assert.isFalse(
+        isVacancyTooOldForIngestion({ datePosted: recent }, INGESTION_MAX_POST_AGE_DAYS, now)
+      )
+    })
+
+    it('should return true when datePosted is older than max age', () => {
+      const old = new Date(now)
+      old.setDate(old.getDate() - (INGESTION_MAX_POST_AGE_DAYS + 1))
+      assert.isTrue(
+        isVacancyTooOldForIngestion({ datePosted: old }, INGESTION_MAX_POST_AGE_DAYS, now)
+      )
+    })
+
+    it('should return false when datePosted is missing or invalid', () => {
+      assert.isFalse(isVacancyTooOldForIngestion({}, INGESTION_MAX_POST_AGE_DAYS, now))
+      assert.isFalse(
+        isVacancyTooOldForIngestion({ datePosted: 'not-a-date' }, INGESTION_MAX_POST_AGE_DAYS, now)
+      )
     })
   })
 
@@ -202,6 +232,34 @@ describe('#IngestionUseCases', () => {
 
       assert.strictEqual(out.metrics.skippedUnsupportedLanguage, 1)
       assert.strictEqual(out.metrics.persisted, 0)
+      assert(adapters.localdb.Vacancy.updateOne.notCalled)
+    })
+
+    it('should skip persistence when vacancy is older than max post age', async () => {
+      const now = new Date('2026-06-06T12:00:00.000Z')
+      const old = new Date(now)
+      old.setDate(old.getDate() - (INGESTION_MAX_POST_AGE_DAYS + 1))
+
+      const jobSources = {
+        ingestVacancies: sandbox.stub().resolves({
+          vacancies: [{ ...validRow(), datePosted: old }],
+          metrics: {}
+        })
+      }
+      const adapters = {
+        jobSources,
+        llm: { score: sandbox.stub() },
+        localdb: { Vacancy: { updateOne: sandbox.stub() } }
+      }
+      sandbox.stub(console, 'log')
+      const uut = new IngestionUseCases({ adapters })
+      const clock = sandbox.useFakeTimers({ now: now.getTime(), toFake: ['Date'] })
+      const out = await uut.ingestVacancies()
+      clock.restore()
+
+      assert.strictEqual(out.metrics.skippedTooOld, 1)
+      assert.strictEqual(out.metrics.persisted, 0)
+      assert(adapters.llm.score.notCalled)
       assert(adapters.localdb.Vacancy.updateOne.notCalled)
     })
 

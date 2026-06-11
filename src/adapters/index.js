@@ -69,6 +69,18 @@ class Adapters {
         console.log('Not starting IPFS node since this is an e2e test.')
       }
 
+      if (!this.config.noMongo) {
+        try {
+          const { initializeDynamicVacancyPrompt } = await import(
+            '../../util/promptInitializer.js'
+          )
+          await initializeDynamicVacancyPrompt()
+          this.llm.reloadSystemPrompt()
+        } catch (err) {
+          console.error('promptInitializer at startup:', err.message)
+        }
+      }
+
       await this.jobSources.start()
 
       console.log('Async Adapters have been started.')

@@ -48,6 +48,10 @@ class VacanciesRouter {
       async (ctx, next) => this.vacanciesController.postApplyVacancy(ctx, next)
     )
     this.router.post(
+      '/reject',
+      async (ctx, next) => this.vacanciesController.postRejectVacancy(ctx, next)
+    )
+    this.router.post(
       '/filter',
       async (ctx, next) => this.vacanciesController.filterVacancies(ctx, next)
     )

@@ -19,7 +19,7 @@ Check for matches in these core areas:
 ## Learned Rejection Patterns (Recent Dismissals)
 Treat each item below as a strong negative signal when scoring (comparable to unwanted primary stack or geography caps):
 
-{{DYNAMIC_REJECT_REASONS}}
+_No recent manual rejection reasons on record._
 
 ## Post Language (Hard Filter)
 * **Accepted posting languages:** **English** or **Spanish** only (evaluate `title`, `summary`, and `content` together).

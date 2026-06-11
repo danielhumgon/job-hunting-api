@@ -93,6 +93,10 @@ class VacancyUseCaseMock {
     return { _id: '507f191e810c19729de860ea', applied: true, appliedAt: new Date() }
   }
 
+  async markVacancyRejected () {
+    return { _id: '507f191e810c19729de860ea', rejected: true, rejectedAt: new Date() }
+  }
+
   async filterVacancies () {
     return { data: [], pagination: { page: 1, limit: 10, total: 0, pages: 1 } }
   }

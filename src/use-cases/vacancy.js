@@ -15,6 +15,9 @@ export const VACANCIES_LIST_PAGE_SIZE = 10
 /** Max items per page for filtered listing (query `perPage`). */
 export const VACANCIES_FILTER_MAX_PER_PAGE = 100
 
+/** Mongo filter: vacancies visible on GET /vacancies listings (not rejected). */
+export const VACANCIES_NOT_REJECTED_FILTER = { rejected: { $ne: true } }
+
 const RESERVED_KEYS = new Set(['_id', '__v', 'createdAt', 'updatedAt'])
 
 function sanitizePayload (body = {}) {
@@ -122,12 +125,12 @@ class VacancyLib {
       const limit = VACANCIES_LIST_PAGE_SIZE
 
       const [data, total] = await Promise.all([
-        this.VacancyModel.find({})
+        this.VacancyModel.find(VACANCIES_NOT_REJECTED_FILTER)
           .sort({ llmScore: -1, datePosted: -1 })
           .skip((p - 1) * limit)
           .limit(limit)
           .lean(),
-        this.VacancyModel.countDocuments({})
+        this.VacancyModel.countDocuments(VACANCIES_NOT_REJECTED_FILTER)
       ])
 
       return {
@@ -153,14 +156,15 @@ class VacancyLib {
   async filterVacancies (raw = {}) {
     try {
       const { filter, page, perPage } = parseVacancyFilterOptions(raw)
+      const query = { ...filter, ...VACANCIES_NOT_REJECTED_FILTER }
 
       const [data, total] = await Promise.all([
-        this.VacancyModel.find(filter)
+        this.VacancyModel.find(query)
           .sort({ datePosted: -1 })
           .skip((page - 1) * perPage)
           .limit(perPage)
           .lean(),
-        this.VacancyModel.countDocuments(filter)
+        this.VacancyModel.countDocuments(query)
       ])
 
       return {
@@ -185,7 +189,10 @@ class VacancyLib {
    */
   async listAppliedVacancies () {
     try {
-      const data = await this.VacancyModel.find({ applied: true })
+      const data = await this.VacancyModel.find({
+        applied: true,
+        ...VACANCIES_NOT_REJECTED_FILTER
+      })
         .sort({ appliedAt: -1 })
         .lean()
 
@@ -231,6 +238,45 @@ class VacancyLib {
   }
 
   /**
+   * Set `rejected: true` and `rejectedAt` to now for the vacancy with this Mongo id.
+   * @param {string} id — Mongo ObjectId string
+   * @param {string} [rejectReason] — optional reason stored on the vacancy
+   */
+  async markVacancyRejected (id, rejectReason) {
+    try {
+      if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+        const err = new Error('Vacancy not found')
+        err.status = 404
+        throw err
+      }
+
+      const rejectedAt = new Date()
+      const patch = { rejected: true, rejectedAt }
+      const reason = trimString(rejectReason)
+      if (reason) patch.rejectReason = reason
+
+      const updated = await this.VacancyModel.findByIdAndUpdate(
+        id,
+        { $set: patch },
+        { new: true, runValidators: true }
+      ).lean()
+
+      if (!updated) {
+        const err = new Error('Vacancy not found')
+        err.status = 404
+        throw err
+      }
+
+      return updated
+    } catch (err) {
+      if (err.status === 404) throw err
+
+      wlogger.error('Error in vacancy.js/markVacancyRejected()')
+      throw err
+    }
+  }
+
+  /**
    * Load a single vacancy by route param `id` (Mongo ObjectId).
    * @param {object} params — e.g. `{ id }` from `ctx.params`
    */
@@ -246,7 +292,7 @@ class VacancyLib {
 
       const vacancy = await this.VacancyModel.findById(id).lean()
 
-      if (!vacancy) {
+      if (!vacancy || vacancy.rejected === true) {
         const err = new Error('Vacancy not found')
         err.status = 404
         throw err

@@ -4,7 +4,7 @@
  * Used by ingestion after job-sources `normalize()`.
  */
 
-import { readFileSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { z } from 'zod'
@@ -68,8 +68,7 @@ export default class LlmAdapter {
     this.apiKey = this.config.llmApiKey || ''
     this._promptVersion = String(this.config.llmPromptVersion || '1')
     this._promptPath =
-      localConfig.promptPath ||
-      path.join(__dirname, 'vacancy-scoring-prompt.md')
+      localConfig.promptPath || this._resolvePromptPath()
     this._systemPrompt = this._loadSystemPrompt()
 
     this._retry = {
@@ -80,11 +79,23 @@ export default class LlmAdapter {
     }
   }
 
+  _resolvePromptPath () {
+    const dynamicPath = path.join(__dirname, 'vacancy-scoring-prompt-dinamic.md')
+    if (existsSync(dynamicPath)) return dynamicPath
+    return path.join(__dirname, 'vacancy-scoring-prompt.md')
+  }
+
+  /** Reload system prompt after util/promptInitializer.js updates the dynamic file. */
+  reloadSystemPrompt () {
+    this._promptPath = this._resolvePromptPath()
+    this._systemPrompt = this._loadSystemPrompt()
+  }
+
   _loadSystemPrompt () {
     try {
       return readFileSync(this._promptPath, 'utf8')
     } catch (err) {
-      console.error('LlmAdapter: cannot read vacancy-scoring-prompt.md:', err.message)
+      console.error('LlmAdapter: cannot read vacancy scoring prompt:', err.message)
       return 'Reply with JSON only: {"score":0,"reasons":[],"flags":[]}'
     }
   }
